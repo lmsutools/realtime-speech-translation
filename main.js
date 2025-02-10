@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard } = require('electron');
 
 let mainWindow;
 let settingsWindow;
@@ -15,7 +15,6 @@ function createWindow() {
         autoHideMenuBar: true,
     });
     mainWindow.loadFile('index.html');
-    mainWindow.webContents.openDevTools();
 }
 
 function createSettingsWindow() {
@@ -34,11 +33,9 @@ function createSettingsWindow() {
         autoHideMenuBar: true,
     });
     settingsWindow.loadFile('settings.html');
-     settingsWindow.webContents.openDevTools();
     settingsWindow.on('closed', () => {
         settingsWindow = null;
     });
-
 }
 
 app.whenReady().then(createWindow);
@@ -51,17 +48,39 @@ app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-ipcMain.handle('type-text', async (event, text) => {
+ipcMain.handle('paste-text', async (event, text) => {
+    clipboard.writeText(text);
+
     try {
-        const { keyboard } = await import('@nut-tree-fork/nut-js');
+        const { keyboard, Key } = await import('@nut-tree-fork/nut-js');
         keyboard.config.autoDelayMs = 0;
-        await keyboard.type(text);
+
+        const modifierKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
+
+        await keyboard.pressKey(modifierKey);
+        await keyboard.pressKey(Key.V);
+        await keyboard.releaseKey(Key.V);
+        await keyboard.releaseKey(modifierKey);
+
     } catch (error) {
-        console.error('Error simulating typing:', error);
+        console.error('Error simulating paste:', error);
     }
     return true;
 });
 
 ipcMain.on('open-settings', () => {
     createSettingsWindow();
+});
+
+ipcMain.on('translation-setting-changed', (event, enableTranslation) => {
+    if (mainWindow) {
+        mainWindow.webContents.send('update-translation-ui', enableTranslation);
+    }
+});
+
+// Listen for model setting changes from settings window
+ipcMain.on('model-setting-changed', (event, selectedModel) => {
+    if (mainWindow) {
+        mainWindow.webContents.send('update-source-languages', selectedModel);
+    }
 });

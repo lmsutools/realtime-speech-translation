@@ -1,5 +1,6 @@
 import { translateWithAI } from './translation.js';
 import { pasteText } from './utils.js';
+import { isInputDeviceAvailable } from './devices.js'; // Import the new function
 
 let mediaRecorder;
 let socket;
@@ -8,19 +9,45 @@ let translations = [];
 
 export async function startRecording() {
     try {
-        // Get ALL settings from localStorage
+        // Get settings from localStorage
         const selectedModel = localStorage.getItem('model') || 'nova-2';
-        const selectedLanguage = localStorage.getItem('defaultSourceLanguage') || 'multi';
+        const selectedLanguage = localStorage.getItem('sourceLanguage');
+        const targetLanguage = localStorage.getItem('targetLanguage');
         const diarizationEnabled = localStorage.getItem('diarizationEnabled') === 'true';
-        const translationEnabled = localStorage.getItem('enableTranslation') === 'true'; // Get from localStorage
-        const selectedDeviceId = localStorage.getItem('defaultInputDevice'); // No fallback
+        const translationEnabled = localStorage.getItem('enableTranslation') === 'true';
+        let selectedDeviceId = localStorage.getItem('defaultInputDevice'); // Get stored ID
 
-        if (!selectedDeviceId) {
-            console.error("No input device selected.  Please select one in settings.");
-            return; // Exit if no device is selected
+        if (!selectedLanguage) {
+            console.error("No source language selected.");
+            return;
+        }
+        if (!targetLanguage) {
+            console.error("No target language selected.");
+            return;
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedDeviceId } });
+        // --- Device Availability Check ---
+        if (selectedDeviceId && !(await isInputDeviceAvailable(selectedDeviceId))) {
+            console.warn(`Previously selected input device (${selectedDeviceId}) is not available.`);
+            localStorage.removeItem('defaultInputDevice'); // Clear the stored ID
+            selectedDeviceId = null; // Don't use the unavailable device
+             //Show message in UI.
+            document.getElementById('source-text').textContent = 'Previously selected input device is not available. Using default device.';
+        }
+
+        let stream;
+        if (selectedDeviceId) {
+            // If we have a valid, available device ID, use it
+            stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedDeviceId } });
+        } else {
+            // Otherwise, fall back to the default device
+            console.warn("Using default input device.");
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+             //Show message in UI.
+            document.getElementById('source-text').textContent = 'Using default input device.';
+
+        }
+
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
         let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true`;
@@ -36,6 +63,11 @@ export async function startRecording() {
 
             if (transcript) {
                 console.log(transcript);
+                 //Show message in UI.
+                if(document.getElementById('source-text').textContent == 'Previously selected input device is not available. Using default device.'
+                || document.getElementById('source-text').textContent == 'Using default input device.'){
+                     document.getElementById('source-text').textContent = '';
+                }
                 document.getElementById('source-text').textContent += ` ${transcript}`;
                 transcriptions.push(transcript);
                 if (transcriptions.length > 10) {
@@ -47,7 +79,6 @@ export async function startRecording() {
                     pasteText(transcript);
                 }
 
-                // Use translationEnabled from localStorage here:
                 if (translationEnabled) {
                     const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
                     translations.push(translation);

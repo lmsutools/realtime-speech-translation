@@ -1,74 +1,35 @@
 import { populateInputDevices } from './modules/devices.js';
+import { ipcRenderer } from 'electron';
 
 document.addEventListener('DOMContentLoaded', () => {
     const modelSelect = document.getElementById('model');
-    const defaultSourceLanguageSelect = document.getElementById('defaultSourceLanguage');
-    const defaultTargetLanguageSelect = document.getElementById('defaultTargetLanguage');
     const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
     const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
     const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
-    const saveSettingsButton = document.getElementById('saveSettingsButton');
+    const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
 
-
-     const targetLanguageOptions = [  //Target options
-        { value: 'en', text: 'English' },
-        { value: 'es', text: 'Spanish' },
-        { value: 'zh', text: 'Chinese Simplified' }
-    ];
-
-    // Populate Source Language Options (Consider moving this to a separate function)
-    const sourceLanguageOptions = [
-        { value: 'en-US', text: 'English (US)' },
-        { value: 'es-ES', text: 'Spanish (Spain)' },
-        { value: 'zh', text: 'Chinese Mandarin Simplified' },
-        { value: 'multi', text: 'Multi (English + Spanish)' }
-    ];
-    sourceLanguageOptions.forEach(opt => {
-        const optionElement = document.createElement('option');
-        optionElement.value = opt.value;
-        optionElement.text = opt.text;
-        defaultSourceLanguageSelect.appendChild(optionElement);
-    });
-
-     targetLanguageOptions.forEach(opt => {  //populate target
-        const optionElement = document.createElement('option');
-        optionElement.value = opt.value;
-        optionElement.text = opt.text;
-        defaultTargetLanguageSelect.appendChild(optionElement);
-    });
-
-    function updateLanguageOptionsByModel(languageSelect, model) {
-        languageSelect.innerHTML = ''; // Clear existing options
-
-        const options = (model === 'nova-2') ? [
-            { value: 'en-US', text: 'English (US)' },
-            { value: 'es-ES', text: 'Spanish (Spain)' },
-            { value: 'zh', text: 'Chinese Mandarin Simplified' },
-            { value: 'multi', text: 'Multi (English + Spanish)' }
-        ] : [
-            { value: 'en', text: 'English' } // nova-3 only supports English
-        ];
-
-        options.forEach(opt => {
-            const optionElement = document.createElement('option');
-            optionElement.value = opt.value;
-            optionElement.text = opt.text;
-            languageSelect.appendChild(optionElement);
-        });
-
+    // Load settings
+    function loadSettings() {
+        modelSelect.value = localStorage.getItem('model') || 'nova-2';
+        populateInputDevices('inputDeviceSettings');
+        const savedDevice = localStorage.getItem('defaultInputDevice');
+        if (savedDevice) {
+            inputDeviceSettingsSelect.value = savedDevice;
+        }
+        diarizationSettingsCheckbox.checked = localStorage.getItem('diarizationEnabled') === 'true';
+        enableTranslationSettingsCheckbox.checked = localStorage.getItem('enableTranslation') === 'true';
+        deepgramApiKeyInput.value = localStorage.getItem('deepgramApiKey') || '';
     }
 
-   // Save settings
+    // Save settings
     function saveSettings() {
-        // Check if each element exists before accessing its properties
+        let modelChanged = false; // Flag to check if the model actually changed
         if (modelSelect) {
+            const previousModel = localStorage.getItem('model');
             localStorage.setItem('model', modelSelect.value);
-        }
-        if (defaultSourceLanguageSelect) {
-            localStorage.setItem('defaultSourceLanguage', defaultSourceLanguageSelect.value);
-        }
-        if (defaultTargetLanguageSelect) {
-            localStorage.setItem('defaultTargetLanguage', defaultTargetLanguageSelect.value);
+            if (previousModel !== modelSelect.value) {
+                modelChanged = true; // Model has changed
+            }
         }
         if (inputDeviceSettingsSelect) {
             localStorage.setItem('defaultInputDevice', inputDeviceSettingsSelect.value);
@@ -78,43 +39,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (enableTranslationSettingsCheckbox) {
             localStorage.setItem('enableTranslation', enableTranslationSettingsCheckbox.checked);
+            ipcRenderer.send('translation-setting-changed', enableTranslationSettingsCheckbox.checked);
+        }
+        if (deepgramApiKeyInput) {
+            localStorage.setItem('deepgramApiKey', deepgramApiKeyInput.value);
         }
 
-        // Update language options when model changes (if modelSelect exists)
-        if (modelSelect && defaultSourceLanguageSelect) {
-            updateLanguageOptionsByModel(defaultSourceLanguageSelect, modelSelect.value);
+        if (modelChanged && modelSelect) {
+            // Send message to main process to update source languages in main window
+            ipcRenderer.send('model-setting-changed', modelSelect.value);
         }
     }
 
-    // Load settings
-    function loadSettings() {
-        // Load Model and update languages
-        const savedModel = localStorage.getItem('model') || 'nova-2';
-        modelSelect.value = savedModel;
-        updateLanguageOptionsByModel(defaultSourceLanguageSelect, savedModel);
-        defaultSourceLanguageSelect.value = localStorage.getItem('defaultSourceLanguage') || 'multi'; //Default
-        defaultTargetLanguageSelect.value = localStorage.getItem('defaultTargetLanguage') || 'en';
-
-        populateInputDevices('inputDeviceSettings');
-        inputDeviceSettingsSelect.value = localStorage.getItem('defaultInputDevice') || ''; // No fallback
-        diarizationSettingsCheckbox.checked = localStorage.getItem('diarizationEnabled') === 'true';
-        enableTranslationSettingsCheckbox.checked = localStorage.getItem('enableTranslation') === 'true'; //Here no problem
-    }
-
-
-    // Event listeners for changes
+    // Event listeners
     modelSelect.addEventListener('change', saveSettings);
-    defaultSourceLanguageSelect.addEventListener('change', saveSettings);
-    defaultTargetLanguageSelect.addEventListener('change', saveSettings);
     inputDeviceSettingsSelect.addEventListener('change', saveSettings);
     diarizationSettingsCheckbox.addEventListener('change', saveSettings);
     enableTranslationSettingsCheckbox.addEventListener('change', saveSettings);
-     //Update language by model
-     modelSelect.addEventListener('change', () => updateLanguageOptionsByModel(defaultSourceLanguageSelect, modelSelect.value));
-
-    // Explicit Save Button
-    saveSettingsButton.addEventListener('click', saveSettings);
-
+    deepgramApiKeyInput.addEventListener('input', saveSettings);
 
     // Initial loading
     loadSettings();

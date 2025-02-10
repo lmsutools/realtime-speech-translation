@@ -1,7 +1,35 @@
 import { populateInputDevices } from './devices.js';
 
+// Function to update the translation UI
+export function updateTranslationUI(enableTranslation) {
+    const translationContainer = document.getElementById('translated-text').parentNode;
+    const targetLanguageSelect = document.getElementById('targetLanguage');
+    const arrowSpan = document.querySelector('.arrow');
+
+    const displayValue = enableTranslation ? 'block' : 'none';
+    translationContainer.style.display = displayValue;
+    targetLanguageSelect.style.display = displayValue;
+    arrowSpan.style.display = displayValue;
+}
+
+// New function to update ONLY the source language dropdown
+export function updateSourceLanguageDropdown(model) {
+    const sourceLanguageSelect = document.getElementById('sourceLanguage');
+    updateLanguageOptions(sourceLanguageSelect, model); // Populate options based on model
+
+    // Set default source language based on model
+    if (model === 'nova-3') {
+        sourceLanguageSelect.value = 'en';
+        localStorage.setItem('sourceLanguage', 'en'); // Update localStorage too
+    } else if (model === 'nova-2') {
+        sourceLanguageSelect.value = 'multi';
+        localStorage.setItem('sourceLanguage', 'multi'); //Update local storage too
+    }
+}
+
+
 function updateLanguageOptions(languageSelect, model) {
-    languageSelect.innerHTML = ''; // Clear existing options
+    languageSelect.innerHTML = '';
 
     const options = (model === 'nova-2') ? [
         { value: 'en-US', text: 'English (US)' },
@@ -9,7 +37,7 @@ function updateLanguageOptions(languageSelect, model) {
         { value: 'zh', text: 'Chinese Mandarin Simplified' },
         { value: 'multi', text: 'Multi (English + Spanish)' }
     ] : [
-        { value: 'en', text: 'English' } // nova-3 only supports English
+        { value: 'en', text: 'English' }
     ];
 
     options.forEach(opt => {
@@ -18,19 +46,19 @@ function updateLanguageOptions(languageSelect, model) {
         optionElement.text = opt.text;
         languageSelect.appendChild(optionElement);
     });
-    if(model === 'nova-2') languageSelect.value = 'multi'
 }
 
 function applySettingsToUI() {
-    const defaultSourceLanguage = localStorage.getItem('defaultSourceLanguage') || 'multi';
-    const defaultTargetLanguage = localStorage.getItem('defaultTargetLanguage') || 'en';
-    const enableTranslation = localStorage.getItem('enableTranslation') === 'true'; // Get from localStorage
+    const enableTranslation = localStorage.getItem('enableTranslation') === 'true';
     const model = localStorage.getItem('model') || 'nova-2';
 
-    // Set values in UI for Source and Target Language selects
-    updateLanguageOptions(document.getElementById('sourceLanguage'), model);
-    document.getElementById('sourceLanguage').value = defaultSourceLanguage;
+    // --- Source Language ---
+    const sourceLanguageSelect = document.getElementById('sourceLanguage');
+    updateLanguageOptions(sourceLanguageSelect, model);
+    sourceLanguageSelect.value = localStorage.getItem('sourceLanguage') || (model === 'nova-2' ? 'multi' : 'en');
+    localStorage.setItem('sourceLanguage', sourceLanguageSelect.value);
 
+    // --- Target Language ---
     const targetLanguageSelect = document.getElementById('targetLanguage');
     const targetLanguageOptions = [
         { value: 'en', text: 'English' },
@@ -43,18 +71,13 @@ function applySettingsToUI() {
         optionElement.text = opt.text;
         targetLanguageSelect.appendChild(optionElement);
     });
-    targetLanguageSelect.value = defaultTargetLanguage;
-
+    targetLanguageSelect.value = localStorage.getItem('targetLanguage') || 'en';
+    localStorage.setItem('targetLanguage', targetLanguageSelect.value);
 
     // --- Translation Toggle ---
-    const translationContainer = document.getElementById('translated-text').parentNode;
-    const toggleTranslationUI = () => {
-        // Use the enableTranslation variable from localStorage
-        const displayValue = enableTranslation ? 'block' : 'none';
-        translationContainer.style.display = displayValue;
-    };
-    toggleTranslationUI(); // Call immediately to set initial state
+    updateTranslationUI(enableTranslation);
 }
+
 
 export function initializeUI() {
     document.addEventListener('DOMContentLoaded', () => {

@@ -15,25 +15,23 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
-        select, input[type="checkbox"] {
+        select, input[type="checkbox"], input[type="text"] { /* Added text input */
             width: 100%;
             padding: 8px;
             border-radius: 4px;
             border: 1px solid #ccc;
             box-sizing: border-box;
         }
-        button {
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+        /* No more button style */
     </style>
 </head>
 <body>
     <h1>Settings</h1>
+
+    <div class="setting-group">
+        <label for="deepgramApiKey">Deepgram API Key:</label>
+        <input type="text" id="deepgramApiKey" placeholder="Enter your Deepgram API Key">
+    </div>
 
     <div class="setting-group">
         <label for="model">Model:</label>
@@ -41,16 +39,6 @@
             <option value="nova-2">nova-2</option>
             <option value="nova-3">nova-3</option>
         </select>
-    </div>
-
-    <div class="setting-group">
-        <label for="defaultSourceLanguage">Default Source Language:</label>
-        <select id="defaultSourceLanguage"></select>
-    </div>
-
-    <div class="setting-group">
-        <label for="defaultTargetLanguage">Default Target Language:</label>
-        <select id="defaultTargetLanguage"></select>
     </div>
 
     <div class="setting-group">
@@ -67,8 +55,6 @@
         <label for="enableTranslationSettings">Enable Translation:</label>
         <input type="checkbox" id="enableTranslationSettings" checked>
     </div>
-
-    <button id="saveSettingsButton">Save Settings</button>
 
     <script src="dist/settings.js"></script>
 </body>
