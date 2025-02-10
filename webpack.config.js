@@ -1,10 +1,14 @@
 const path = require('path');
+
 module.exports = {
-  mode: 'development',
-  target: 'electron-renderer',
-  entry: './renderer.js',
-  output: {
-    filename: 'bundle.js',
-    path: path.resolve(__dirname, 'dist'),
-  },
+    mode: 'development',
+    target: 'electron-renderer',
+    entry: {
+        bundle: './renderer.js', // Main entry point
+        settings: './settings.js' // Settings entry point
+    },
+    output: {
+        filename: '[name].js', // Output: bundle.js, settings.js
+        path: path.resolve(__dirname, 'dist'),
+    },
 };

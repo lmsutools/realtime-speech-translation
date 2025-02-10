@@ -1,134 +1,41 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <title>Realtime Translator</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background-color: #f0f0f0;
-        margin: 0;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-      h1 {
-        color: #333;
-        text-align: center;
-        margin-bottom: 20px;
-      }
-      div {
-        margin-bottom: 15px;
-        width: 100%;
-        max-width: 400px;
-      }
-      label {
-        font-weight: bold;
-        color: #555;
-        display: block;
-        margin-bottom: 5px;
-      }
-      select,
-      button {
-        width: 100%;
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-        font-size: 16px;
-      }
-      select {
-        background-color: white;
-      }
-      button {
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        cursor: pointer;
-        transition: background-color 0.3s;
-        margin-top: 10px;
-      }
-      button:hover {
-        background-color: #45a049;
-      }
-      span {
-        font-weight: bold;
-        color: #333;
-      }
-      p {
-        background-color: white;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        padding: 10px;
-        min-height: 50px;
-      }
-      #stop {
-        display: none;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Realtime Translator</h1>
-    <!-- Model & Language Selection -->
-    <div>
-      <label for="model">Model:</label>
-      <select id="model">
-        <option value="nova-2" selected>nova-2</option>
-        <option value="nova-3">nova-3</option>
-      </select>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="top-bar">
+        <div class="controls">
+            <select id="pasteOption">
+                <option value="none">-Paste-</option>
+                <option value="source">Source</option>
+                <option value="translated">Translated</option>
+            </select>
+            <button id="typingAppButton">Typing App</button>
+            <select id="sourceLanguage"></select>
+            <span>&rarr;</span>
+            <select id="targetLanguage"></select>
+        </div>
+        <div id="settingsIcon">&#9881;</div>
     </div>
-    <div>
-      <label for="language">Source Language:</label>
-      <select id="language"></select>
+
+    <div class="main-content">
+        <div class="pane source-pane">
+            <p id="source-text" class="text-display"></p>
+        </div>
+        <div class="pane translated-pane">
+            <p id="translated-text" class="text-display"></p>
+        </div>
     </div>
-    <!-- Target language is now a dropdown -->
-    <div id="targetLanguageContainer">
-      <label for="targetLanguage">Target Language:</label>
-      <select id="targetLanguage">
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="zh">Chinese Simplified</option>
-      </select>
+
+    <div class="bottom-bar">
+        <button id="start" class="mic-button">Start</button>
+        <button id="stop" class="mic-button">Stop</button>
+        <button id="reset">Reset</button>
     </div>
-    <!-- Input Device Dropdown -->
-    <div>
-      <label for="inputDevice">Input Device:</label>
-      <select id="inputDevice"></select>
-    </div>
-    <!-- Diarization Checkbox -->
-    <div>
-      <label for="diarization">Enable Diarization</label>
-      <input type="checkbox" id="diarization">
-    </div>
-    <!-- Auto Paste Option Dropdown -->
-    <div>
-      <label for="pasteOption">Auto Paste Option:</label>
-      <select id="pasteOption">
-        <option value="none">-Select Paste Option-</option>
-        <option value="source">Original Source</option>
-        <option value="translated">Translated Captions</option>
-      </select>
-    </div>
-    <!-- Enable Translation Checkbox -->
-    <div>
-      <label for="enableTranslation">Enable Translation</label>
-      <input type="checkbox" id="enableTranslation" checked>
-    </div>
-    <!-- Source Text Container -->
-    <div>
-      <span>Source Text:</span>
-      <p id="source-text"></p>
-    </div>
-    <!-- Translation Container (hidden if translation disabled) -->
-    <div id="translation-container">
-      <span>Translation:</span>
-      <p id="translated-text"></p>
-    </div>
-    <!-- Control Buttons -->
-    <div>
-      <button id="start">Start</button>
-      <button id="stop">Stop</button>
-      <button id="reset">Reset</button>
-    </div>
+
     <script src="dist/bundle.js"></script>
-  </body>
+</body>
 </html>
+

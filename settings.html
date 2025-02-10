@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Settings</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            padding: 20px;
+        }
+        .setting-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input[type="checkbox"] {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Settings</h1>
+
+    <div class="setting-group">
+        <label for="model">Model:</label>
+        <select id="model">
+            <option value="nova-2">nova-2</option>
+            <option value="nova-3">nova-3</option>
+        </select>
+    </div>
+
+    <div class="setting-group">
+        <label for="defaultSourceLanguage">Default Source Language:</label>
+        <select id="defaultSourceLanguage"></select>
+    </div>
+
+    <div class="setting-group">
+        <label for="defaultTargetLanguage">Default Target Language:</label>
+        <select id="defaultTargetLanguage"></select>
+    </div>
+
+    <div class="setting-group">
+        <label for="inputDeviceSettings">Input Device:</label>
+        <select id="inputDeviceSettings"></select>
+    </div>
+
+    <div class="setting-group">
+        <label for="diarizationSettings">Enable Diarization:</label>
+        <input type="checkbox" id="diarizationSettings">
+    </div>
+
+    <div class="setting-group">
+        <label for="enableTranslationSettings">Enable Translation:</label>
+        <input type="checkbox" id="enableTranslationSettings" checked>
+    </div>
+
+    <button id="saveSettingsButton">Save Settings</button>
+
+    <script src="dist/settings.js"></script>
+</body>
+</html>
