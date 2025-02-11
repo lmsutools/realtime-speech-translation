@@ -1,23 +1,45 @@
-
 export async function translateWithAI(text, context, translationContext) {
   try {
-    // Get the target language from the dropdown.
     const targetLangCode = document.getElementById('targetLanguage').value;
-    const targetLanguageMapping = {
-      en: "English",
-      es: "Spanish",
-      zh: "Chinese Simplified"
-    };
+    const targetLanguageMapping = { en: "English", es: "Spanish", zh: "Chinese Simplified" };
     const targetLanguage = targetLanguageMapping[targetLangCode] || "English";
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    
+    // --- Get Translate AI Provider Settings from localStorage ---
+    const selectedProviderId = localStorage.getItem('translateDefaultAiProvider') || 'openai';
+    const providersJson = localStorage.getItem('aiProviders');
+    const translateAiProviders = JSON.parse(providersJson);
+    const selectedProvider = translateAiProviders.find(provider => provider.id === selectedProviderId);
+    if (!selectedProvider) {
+      console.error(`AI Provider with ID "${selectedProviderId}" not found in settings.`);
+      return `AI Provider "${selectedProviderId}" not configured.`;
+    }
+    const apiKey = localStorage.getItem(selectedProvider.apiKeySettingKey);
+    const translateAiModel = localStorage.getItem('translateDefaultAiModel') || selectedProvider.defaultModel;
+    if (!apiKey) {
+      console.error(`${selectedProvider.name} API key is not set. Please set it in settings.`);
+      return `${selectedProvider.name} API key not set.`;
+    }
+    
+    console.log("Using AI Provider:", selectedProvider.name);
+    console.log("Using AI Model:", translateAiModel);
+    
+    // --- Use OpenAI-compatible API call for all providers ---
+    let apiEndpoint = selectedProvider.endpoint;
+    // Override endpoints for providers that may have legacy endpoints in storage:
+    if (selectedProvider.id === 'gemini') {
+      apiEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+    } else if (selectedProvider.id === 'groq') {
+      apiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
+    }
+    
+    const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: translateAiModel,
         messages: [{
           role: 'user',
           content: `### **Translation Guidelines**:
@@ -36,26 +58,27 @@ export async function translateWithAI(text, context, translationContext) {
 - Input: "profesor" with context "Él es" → Output: "a teacher"
 - Input: "bonjour" with context "He greeted her saying" → Output: "hello"
 - Input: "Escuela" with context "Estamos en la" → Output: "school"
-
 #### Translate the following text to ${targetLanguage}:
 - **Input**: Text: "${text}"
 - Input Context: "${context}"
 - Translation Context: "${translationContext}"
-Output:`,
+Output:`
         }],
       }),
     });
-
+    
     if (!response.ok) {
       console.error(`Error in translation request: ${response.statusText}`);
-      return '';
+      return `Translation Error: ${response.statusText}`;
     }
-    const { choices } = await response.json();
-    return (choices[0]?.message?.content || '')
-      .replaceAll('"', '')
-      .replaceAll(`'`, '');
+    
+    const result = await response.json();
+    const translatedText = (result.choices && result.choices[0]?.message?.content)
+      ? result.choices[0].message.content.replaceAll('"', '').replaceAll(`'`, '')
+      : '';
+    return translatedText.replace(/<think>.*?<\/think>/gs, '').trim();
   } catch (error) {
     console.error('Error during translation:', error.message);
-    return '';
+    return `Translation Error: ${error.message}`;
   }
 }

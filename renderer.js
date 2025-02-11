@@ -1,8 +1,9 @@
-import dotenv from 'dotenv';
-dotenv.config();
-import { initializeUI, updateSourceLanguageDropdown } from './modules/ui.js'; // Import the new function
+import { initializeUI, updateSourceLanguageDropdown } from './modules/ui.js';
 import { startRecording, stopRecording } from './modules/recording.js';
 import { ipcRenderer } from 'electron';
+
+//Remove dotenv import
+//dotenv.config();
 
 initializeUI();
 
@@ -22,7 +23,6 @@ ipcRenderer.on('update-translation-ui', (event, enableTranslation) => {
     });
 });
 
-// Listen for source language updates from main process
 ipcRenderer.on('update-source-languages', (event, selectedModel) => {
-    updateSourceLanguageDropdown(selectedModel); // Call directly, already imported
+    updateSourceLanguageDropdown(selectedModel);
 });

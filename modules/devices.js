@@ -1,3 +1,4 @@
+
 export async function populateInputDevices(selectElementId) {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -17,9 +18,8 @@ export async function populateInputDevices(selectElementId) {
             option.value = device.deviceId;
             option.text = device.label || `Microphone ${inputSelect.length + 1}`;
 
-            // --- Set 'selected' attribute during population ---
             if (savedDeviceId && device.deviceId === savedDeviceId) {
-                option.selected = true; // Select the matching device
+                option.selected = true;
                 console.log(`Device ${device.label} marked as selected because it matches saved ID: ${savedDeviceId}`);
             }
 
@@ -29,5 +29,17 @@ export async function populateInputDevices(selectElementId) {
 
     } catch (error) {
         console.error('Error populating input devices:', error);
+    }
+}
+
+// --- Explicitly export isInputDeviceAvailable ---
+export async function isInputDeviceAvailable(deviceId) {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+        return audioInputDevices.some(device => device.deviceId === deviceId);
+    } catch (error) {
+        console.error('Error checking device availability:', error);
+        return false;
     }
 }
