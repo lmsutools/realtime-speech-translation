@@ -15,15 +15,13 @@ body {
     left: 0;
     width: 100%;
     display: flex;
-    justify-content: flex-start;
+    justify-content: space-between; /* Changed to space-between */
     align-items: center;
     padding: 10px;
     background-color: #eee;
     border-bottom: 1px solid #ddd;
     z-index: 1000;
     /* Ensure it stays on top */
-    gap: 10px;
-    /* Add gap between controls */
 }
 
 .controls {
@@ -42,13 +40,16 @@ body {
 #settingsIcon {
     font-size: 24px;
     cursor: pointer;
+    margin-left: auto;
+    margin-right: 20px;
 }
 
 .main-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
     flex-grow: 1;
-    padding-top: 35px; /* Add padding to push content down */
+    padding-top: 60px;
+    /* Add padding to push content down */
 }
 
 .pane {
@@ -87,7 +88,7 @@ body {
 }
 
 #stop {
-     /*display: none; Removed initial display none, we control from JS*/
+    /*display: none; Removed initial display none, we control from JS*/
     background-color: #f44336;
 }
 

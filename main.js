@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const { simulatePaste } = require('./modules/typing/typing.js'); // Use require
 
 let mainWindow;
 let settingsWindow;
@@ -31,7 +32,7 @@ function createSettingsWindow() {
         },
         autoHideMenuBar: true,
     });
-    settingsWindow.loadFile('modules/settings/settings.html'); // Corrected path
+    settingsWindow.loadFile('modules/settings/settings.html');
     settingsWindow.on('closed', () => {
         settingsWindow = null;
     });
@@ -48,22 +49,13 @@ app.on('activate', () => {
 });
 
 ipcMain.handle('paste-text', async (event, text) => {
-    clipboard.writeText(text);
     try {
-        const {
-            keyboard,
-            Key
-        } = await import('@nut-tree-fork/nut-js');
-        keyboard.config.autoDelayMs = 0;
-        const modifierKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
-        await keyboard.pressKey(modifierKey);
-        await keyboard.pressKey(Key.V);
-        await keyboard.releaseKey(Key.V);
-        await keyboard.releaseKey(modifierKey);
+        await simulatePaste(text); // Call the function from the typing module
+        return true; // Indicate success
     } catch (error) {
-        console.error('Error simulating paste:', error);
+        console.error('Error in paste-text handler:', error);
+        return false; // Indicate failure
     }
-    return true;
 });
 
 ipcMain.on('open-settings', () => {
