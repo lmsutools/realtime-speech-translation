@@ -1,3 +1,4 @@
+// file: modules/typing/typing.js
 const { clipboard } = require('electron'); // Use require in main process
 
 async function simulatePaste(text) {

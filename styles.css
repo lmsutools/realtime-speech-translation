@@ -10,16 +10,18 @@ body {
 
 .top-bar {
     position: fixed;
+    /* Make the top-bar fixed */
     top: 0;
     left: 0;
     width: 100%;
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; /* Changed to space-between */
     align-items: center;
     padding: 10px;
     background-color: #eee;
     border-bottom: 1px solid #ddd;
     z-index: 1000;
+    /* Ensure it stays on top */
 }
 
 .controls {
@@ -47,6 +49,7 @@ body {
     grid-template-columns: 1fr 1fr;
     flex-grow: 1;
     padding-top: 60px;
+    /* Add padding to push content down */
 }
 
 .pane {
@@ -85,6 +88,7 @@ body {
 }
 
 #stop {
+    /*display: none; Removed initial display none, we control from JS*/
     background-color: #f44336;
 }
 
@@ -93,7 +97,7 @@ body {
     color: white;
     border: none;
     cursor: pointer;
-    transition: background-color: 0.3s;
+    transition: background-color 0.3s;
     margin-top: 10px;
     padding: 10px;
     border-radius: 5px;
@@ -108,20 +112,4 @@ body {
 .bottom-bar div,
 .bottom-bar label {
     width: auto;
-}
-
-#error-logs {
-    width: 100%;
-    margin-top: 10px;
-    max-height: 150px;
-    overflow-y: auto;
-    border: 1px solid #ccc;
-    padding: 5px;
-}
-
-#error-logs p {
-    color: red;
-    font-size: 0.8em;
-    margin: 2px 0;
-    word-break: break-word;
 }

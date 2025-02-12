@@ -2,4 +2,3 @@ node_modules
 /.env
 .minifiedCodes.chatgpt
 dist
-dist\bundle.js
