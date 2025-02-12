@@ -5,7 +5,7 @@ module.exports = {
     target: 'electron-renderer',
     entry: {
         bundle: './renderer.js', // Main entry point
-        settings: './settings.js' // Settings entry point
+        settings: './modules/settings/mainSettings.js' // Settings entry point
     },
     output: {
         filename: '[name].js', // Output: bundle.js, settings.js

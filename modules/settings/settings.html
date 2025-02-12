@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Settings</title>
+    <link rel="stylesheet" href="../../styles.css">
+    <style>
+        body {
+            padding: 20px;
+        }
+
+        /* Tabs Styles (No changes needed) */
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .tab-button {
+            padding: 8px 15px;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+        }
+
+        .tab-button.active {
+            background-color: #ddd;
+        }
+
+        .tab-content {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 0 0 5px 5px;
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        .setting-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        select,
+        input[type="checkbox"],
+        input[type="text"],
+        textarea {
+            /* Added textarea */
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            font-family: monospace;
+            /* Monospace for model list */
+            height: 100px;
+            /* Adjust as needed */
+        }
+
+
+        .provider-settings {
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+
+        .provider-settings h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        /* Styles for Provider List and Buttons */
+        #providerList {
+            margin-bottom: 15px;
+        }
+
+        .provider-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .provider-item:last-child {
+            border-bottom: none;
+        }
+
+        .provider-actions button {
+            margin-left: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        #addProviderButton,
+        #saveProviderButton,
+        #cancelProviderButton {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 8px 15px;
+            margin-top: 10px;
+        }
+
+        #cancelProviderButton,
+        .provider-actions .delete-provider {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Settings</h1>
+    <div class="tab-buttons"><button class="tab-button active" data-tab="speech">Speech</button> <button
+            class="tab-button" data-tab="translate">Translate</button></div>
+    <div class="tab-content">
+        <div id="speech" class="tab-pane active">
+            <div class="setting-group">
+                <label for="deepgramApiKey">Deepgram API Key:</label>
+                <input type="text" id="deepgramApiKey" placeholder="Enter your Deepgram API Key">
+            </div>
+            <div class="setting-group">
+                <label for="model">Model:</label>
+                <select id="model">
+                    <option value="nova-2">nova-2</option>
+                    <option value="nova-3">nova-3</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label for="inputDeviceSettings">Input Device:</label>
+                <select id="inputDeviceSettings"></select>
+            </div>
+            <div class="setting-group">
+                <label for="diarizationSettings">Enable Diarization:</label>
+                <input type="checkbox" id="diarizationSettings">
+            </div>
+            <div class="setting-group">
+                <label for="enableTranslationSettings">Enable Translation:</label>
+                <input type="checkbox" id="enableTranslationSettings" checked="checked">
+            </div>
+        </div>
+        <div id="translate" class="tab-pane">
+            <div class="setting-group">
+                <label for="defaultAiProviderSelect">Default AI Provider:</label>
+                <select id="defaultAiProviderSelect"></select>
+            </div>
+            <div class="setting-group">
+                <label for="defaultAiModelSelect">Default Model:</label>
+                <select id="defaultAiModelSelect"></select>
+            </div>
+            <div id="providerList"></div>
+            <button id="addProviderButton">Add Provider</button>
+            <div id="providerEditForm" class="provider-settings" style="display:none;">
+                <h3>Provider Settings</h3>
+                <div class="setting-group">
+                    <label for="providerName">Provider Name:</label>
+                    <input type="text" id="providerName" placeholder="Provider Name">
+                </div>
+                <div class="setting-group">
+                    <label for="providerApiKey">API Key:</label>
+                    <input type="text" id="providerApiKey" placeholder="Enter your API Key">
+                </div>
+                <div class="setting-group">
+                    <label for="providerModels">Models (comma-separated):</label>
+                    <textarea id="providerModels" placeholder="Enter models, comma-separated"></textarea>
+                </div>
+                <div class="setting-group">
+                    <label for="providerEndpoint">API Endpoint:</label>
+                    <input type="text" id="providerEndpoint" placeholder="API Endpoint">
+                </div>
+                <button id="saveProviderButton">Save Provider</button>
+                <button id="cancelProviderButton">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script src="../../dist/settings.js"></script>
+</body>
+
+</html>

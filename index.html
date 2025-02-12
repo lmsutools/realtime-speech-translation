@@ -1,37 +1,40 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <title>Realtime Translator</title>
-  <link rel="stylesheet" href="styles.css">
+    <title>Realtime Translator</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
-  <div class="top-bar">
-    <div class="controls">
-      <select id="pasteOption">
-         <option value="none">-Paste-</option>
-         <option value="source">Source</option>
-         <option value="translated">Translated</option>
-      </select>
-      <button id="typingAppButton">Typing App</button>
-      <select id="sourceLanguage"></select>
-      <span class="arrow">&rarr;</span>
-      <select id="targetLanguage"></select>
+    <div class="top-bar">
+        <div class="controls">
+            <button id="start" class="mic-button">Start</button>
+            <button id="stop" class="mic-button" style="display: none;">Stop</button> <!-- Moved Stop button here -->
+            <button id="reset">Reset</button>
+            <select id="pasteOption">
+                <option value="none">-Paste-</option>
+                <option value="source">Source</option>
+                <option value="translated">Translated</option>
+            </select>
+            <button id="typingAppButton">Typing App</button>
+            <select id="sourceLanguage"></select>
+            <span class="arrow">&rarr;</span>
+            <select id="targetLanguage"></select>
+        </div>
+        <div id="settingsIcon">&#9881;</div>
     </div>
-    <div id="settingsIcon">&#9881;</div>
-  </div>
-  <div class="main-content">
-    <div class="pane source-pane">
-      <p id="source-text" class="text-display"></p>
+    <div class="main-content">
+        <div class="pane source-pane">
+            <p id="source-text" class="text-display"></p>
+        </div>
+        <div class="pane translated-pane">
+            <p id="translated-text" class="text-display"></p>
+        </div>
     </div>
-    <div class="pane translated-pane">
-      <p id="translated-text" class="text-display"></p>
-    </div>
-  </div>
-  <div class="bottom-bar">
-    <button id="start" class="mic-button">Start</button>
-    <button id="stop" class="mic-button">Stop</button>
-    <button id="reset">Reset</button>
-  </div>
-  <script src="dist/bundle.js"></script>
+    <div class="bottom-bar">
+        </div> <!-- Removed Stop button from here -->
+    <script src="dist/bundle.js"></script>
 </body>
+
 </html>

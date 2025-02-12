@@ -22,7 +22,6 @@ function createSettingsWindow() {
         settingsWindow.focus();
         return;
     }
-
     settingsWindow = new BrowserWindow({
         width: 400,
         height: 500,
@@ -32,7 +31,7 @@ function createSettingsWindow() {
         },
         autoHideMenuBar: true,
     });
-    settingsWindow.loadFile('settings.html');
+    settingsWindow.loadFile('modules/settings/settings.html'); // Corrected path
     settingsWindow.on('closed', () => {
         settingsWindow = null;
     });
@@ -50,18 +49,17 @@ app.on('activate', () => {
 
 ipcMain.handle('paste-text', async (event, text) => {
     clipboard.writeText(text);
-
     try {
-        const { keyboard, Key } = await import('@nut-tree-fork/nut-js');
+        const {
+            keyboard,
+            Key
+        } = await import('@nut-tree-fork/nut-js');
         keyboard.config.autoDelayMs = 0;
-
         const modifierKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
-
         await keyboard.pressKey(modifierKey);
         await keyboard.pressKey(Key.V);
         await keyboard.releaseKey(Key.V);
         await keyboard.releaseKey(modifierKey);
-
     } catch (error) {
         console.error('Error simulating paste:', error);
     }

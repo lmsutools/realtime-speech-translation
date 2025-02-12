@@ -25,6 +25,7 @@ export async function startRecording() {
         const defaultAiProvider = aiProviders.find(provider => provider.id === defaultAiProviderId);
         const defaultAiModel = localStorage.getItem('translateDefaultAiModel') || defaultAiProvider.defaultModel;
 
+
         if (!selectedLanguage) {
             console.error("No source language selected.");
             return;
@@ -36,54 +37,67 @@ export async function startRecording() {
         if (!deepgramKey) {
             console.error("Deepgram API key is not set. Please set it in settings.");
             document.getElementById('source-text').textContent =
-              'Deepgram API key is not set. Please set it in settings.';
+                'Deepgram API key is not set. Please set it in settings.';
             return;
         }
+
         if (selectedDeviceId && !(await isInputDeviceAvailable(selectedDeviceId))) {
             console.warn(`Previously selected input device (${selectedDeviceId}) is not available.`);
             localStorage.removeItem('defaultInputDevice');
             document.getElementById('source-text').textContent =
-              'Previously selected input device is not available. Using default device.';
+                'Previously selected input device is not available. Using default device.';
         }
+
         let stream;
         if (selectedDeviceId) {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedDeviceId } });
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    deviceId: selectedDeviceId
+                }
+            });
         } else {
             console.warn("Using default input device.");
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
             document.getElementById('source-text').textContent = 'Using default input device.';
         }
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        
+
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm'
+        });
+
         // Build query parameters for Deepgram’s /listen endpoint.
         // Always include model, language, and punctuation.
         let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true`;
         if (diarizationEnabled) {
             queryParams += `&diarize=true`;
         }
-        
+
         socket = new WebSocket(`wss://api.deepgram.com/v1/listen${queryParams}`, ['token', deepgramKey]);
+
         socket.onmessage = async (msg) => {
             const parsed = JSON.parse(msg.data || '{}');
             const transcript = parsed?.channel?.alternatives[0]?.transcript;
             if (transcript) {
                 console.log(transcript);
-                if (
-                    document.getElementById('source-text').textContent === 'Previously selected input device is not available. Using default device.' ||
+                if (document.getElementById('source-text').textContent === 'Previously selected input device is not available. Using default device.' ||
                     document.getElementById('source-text').textContent === 'Using default input device.' ||
-                    document.getElementById('source-text').textContent === 'Deepgram API key is not set. Please set it in settings.'
-                ) {
+                    document.getElementById('source-text').textContent === 'Deepgram API key is not set. Please set it in settings.') {
                     document.getElementById('source-text').textContent = '';
                 }
                 document.getElementById('source-text').textContent += ` ${transcript}`;
                 transcriptions.push(transcript);
+
                 if (transcriptions.length > 10) {
                     transcriptions.shift();
                 }
+
                 const pasteOption = document.getElementById('pasteOption').value;
                 if (pasteOption === 'source') {
                     pasteText(transcript);
                 }
+
                 if (translationEnabled) {
                     // Pass the transcript to translateWithAI (which handles provider selection)
                     const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
@@ -91,7 +105,7 @@ export async function startRecording() {
                     if (translations.length > 10) {
                         translations.shift();
                     }
-                    console.log('translation', translation);
+                    console.log('translation', translation)
                     document.getElementById('translated-text').textContent += ` ${translation}`;
                     if (pasteOption === 'translated') {
                         pasteText(translation);
@@ -99,26 +113,33 @@ export async function startRecording() {
                 }
             }
         };
+
         socket.onerror = (error) => {
             console.error('WebSocket error:', error);
         };
+
         socket.onclose = () => {
             console.log('WebSocket connection closed');
         };
+
         socket.onopen = () => {
             mediaRecorder.start(50);
             console.log('MediaRecorder started');
             // Debug: Log the selected AI Provider and Model for verification.
             console.log("Using AI Provider on Start:", defaultAiProvider.name);
             console.log("Using AI Model on Start:", defaultAiModel);
+
         };
+
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
                 socket.send(event.data);
             }
         };
+
         document.getElementById('start').style.display = 'none';
-        document.getElementById('stop').style.display = 'block';
+        document.getElementById('stop').style.display = 'block'; // Show Stop button
+
     } catch (error) {
         console.error('Error starting recording:', error);
     }
@@ -133,6 +154,6 @@ export function stopRecording() {
         socket.close();
         socket = null;
     }
-    document.getElementById('start').style.display = 'block';
-    document.getElementById('stop').style.display = 'none';
+    document.getElementById('start').style.display = 'block'; // Show Start button
+    document.getElementById('stop').style.display = 'none'; // Hide Stop button
 }

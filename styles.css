@@ -9,26 +9,35 @@ body {
 }
 
 .top-bar {
+    position: fixed;
+    /* Make the top-bar fixed */
+    top: 0;
+    left: 0;
+    width: 100%;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     padding: 10px;
     background-color: #eee;
     border-bottom: 1px solid #ddd;
+    z-index: 1000;
+    /* Ensure it stays on top */
+    gap: 10px;
+    /* Add gap between controls */
 }
 
 .controls {
     display: flex;
     align-items: center;
-    gap: 10px; /* Spacing between controls */
+    gap: 10px;
 }
 
-.controls select, .controls button {
+.controls select,
+.controls button {
     padding: 8px;
     border-radius: 4px;
     border: 1px solid #ccc;
 }
-
 
 #settingsIcon {
     font-size: 24px;
@@ -38,33 +47,36 @@ body {
 .main-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    flex-grow: 1; /* Take up remaining space */
+    flex-grow: 1;
+    padding-top: 35px; /* Add padding to push content down */
 }
 
 .pane {
     padding: 20px;
     border: 1px solid #ddd;
-    overflow-y: auto; /* Scrollable content */
+    overflow-y: auto;
 }
 
 .source-pane {
-    border-right: none; /* Remove the border between panes */
+    border-right: none;
 }
 
 .text-display {
-    min-height: 50px; /* Prevent jumping */
-    white-space: pre-wrap; /* Preserve line breaks and spaces */
+    min-height: 50px;
+    white-space: pre-wrap;
 }
-.bottom-bar{
+
+.bottom-bar {
     padding: 20px;
     display: flex;
     justify-content: center;
     gap: 10px;
-     flex-direction: column;
+    flex-direction: column;
     align-items: center;
 }
+
 .mic-button {
-    width: auto;  /*  width */
+    width: auto;
     padding: 10px 20px;
     border-radius: 5px;
     border: 1px solid #ccc;
@@ -75,24 +87,28 @@ body {
 }
 
 #stop {
-    display: none;
+     /*display: none; Removed initial display none, we control from JS*/
     background-color: #f44336;
 }
-.bottom-bar button{
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.3s;
-  margin-top: 10px;
-  padding: 10px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 16px;
+
+.bottom-bar button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 16px;
 }
-#reset{
-   background-color: #2196F3;
+
+#reset {
+    background-color: #2196F3;
 }
-.bottom-bar div, .bottom-bar label{
-      width: auto;
+
+.bottom-bar div,
+.bottom-bar label {
+    width: auto;
 }
