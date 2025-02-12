@@ -3,4 +3,3 @@ node_modules
 .minifiedCodes.chatgpt
 dist
 dist\bundle.js
-/.minifiedCodes.chatgpt
