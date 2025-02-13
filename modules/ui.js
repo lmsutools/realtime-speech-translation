@@ -31,29 +31,30 @@ export function updateLanguageOptions(languageSelect, model) {
 export async function updateSourceLanguageDropdown(model) {
   const sourceLanguageSelect = document.getElementById('sourceLanguage');
   updateLanguageOptions(sourceLanguageSelect, model);
+  const availableOptions = Array.from(sourceLanguageSelect.options).map(opt => opt.value);
   const defaultLang = (model === 'nova-3') ? 'en' : 'multi';
   const storedLang = await getStoreValue('sourceLanguage', defaultLang);
-  sourceLanguageSelect.value = storedLang;
-  await setStoreValue('sourceLanguage', storedLang);
+  const validLang = availableOptions.includes(storedLang) ? storedLang : defaultLang;
+  sourceLanguageSelect.value = validLang;
+  await setStoreValue('sourceLanguage', validLang);
 }
 
 export async function applySettingsToUI() {
-  // Retrieve persistent settings via storeBridge.
   const enableTranslation = (await getStoreValue('enableTranslation', false)) === true;
   const model = await getStoreValue('model', 'nova-2');
-  const sourceLanguage = await getStoreValue('sourceLanguage', model === 'nova-2' ? 'multi' : 'en');
+  const storedSourceLanguage = await getStoreValue('sourceLanguage', model === 'nova-2' ? 'multi' : 'en');
   const targetLanguage = await getStoreValue('targetLanguage', 'en');
 
-  // Update Source Language
+  // Update Source Language Dropdown with validation.
   const sourceLanguageSelect = document.getElementById('sourceLanguage');
   updateLanguageOptions(sourceLanguageSelect, model);
-  sourceLanguageSelect.value = sourceLanguage;
-  // Save changes if user selects a different source language.
-  sourceLanguageSelect.addEventListener('change', async (e) => {
-    await setStoreValue('sourceLanguage', e.target.value);
-  });
+  const availableOptions = Array.from(sourceLanguageSelect.options).map(opt => opt.value);
+  const defaultLang = (model === 'nova-3') ? 'en' : 'multi';
+  const validSourceLanguage = availableOptions.includes(storedSourceLanguage) ? storedSourceLanguage : defaultLang;
+  sourceLanguageSelect.value = validSourceLanguage;
+  await setStoreValue('sourceLanguage', validSourceLanguage);
 
-  // Update Target Language
+  // Update Target Language Dropdown.
   const targetLanguageSelect = document.getElementById('targetLanguage');
   targetLanguageSelect.innerHTML = '';
   const targetLanguageOptions = [
@@ -68,13 +69,17 @@ export async function applySettingsToUI() {
     targetLanguageSelect.appendChild(optionElement);
   });
   targetLanguageSelect.value = targetLanguage;
-  // Save changes if user selects a different target language.
+  await setStoreValue('targetLanguage', targetLanguage);
+
+  updateTranslationUI(enableTranslation);
+
+  // Listen for changes on the dropdowns to update persistent store.
+  sourceLanguageSelect.addEventListener('change', async (e) => {
+    await setStoreValue('sourceLanguage', e.target.value);
+  });
   targetLanguageSelect.addEventListener('change', async (e) => {
     await setStoreValue('targetLanguage', e.target.value);
   });
-
-  // Update translation UI based on enableTranslation setting.
-  updateTranslationUI(enableTranslation);
 }
 
 export function initializeUI() {
