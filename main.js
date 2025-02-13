@@ -6,7 +6,7 @@ let settingsWindow;
 let typingAppWindow = null;
 let isRecording = false;
 let currentGlobalShortcut = 'CommandOrControl+Shift+T';
-let store;
+let store; // electron-store instance
 
 function registerGlobalShortcut(shortcut) {
   globalShortcut.unregisterAll();
@@ -82,11 +82,29 @@ function createTypingAppWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Dynamically import electron-store to avoid webpack ESM issues.
   const StoreModule = await import('electron-store');
   const Store = StoreModule.default;
-  store = new Store();
+  store = new Store({
+    defaults: {
+      model: 'nova-2',                   // Speech model
+      sourceLanguage: 'multi',           // Speech language
+      defaultInputDevice: '',
+      diarizationEnabled: false,
+      enableTranslation: false,
+      deepgramApiKey: '',
+      translateDefaultAiProvider: 'Google AI',  // Translation default provider
+      translateDefaultAiModel: 'gemini-2.0-flash-001', // Translation default model
+      aiProviders: '[]',
+      typingAppGlobalShortcut: 'CommandOrControl+Shift+T',
+      targetLanguage: 'en'
+    }
+  });
+
+  // Load global shortcut from persistent store.
   currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
   registerGlobalShortcut(currentGlobalShortcut);
+
   createWindow();
 });
 
@@ -147,4 +165,25 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
   if (store) {
     store.set('typingAppGlobalShortcut', newShortcut);
   }
+});
+
+// ---------------------- Persistent Store IPC Handlers ----------------------
+ipcMain.handle('store-get', async (event, key, defaultValue) => {
+  return store ? store.get(key, defaultValue) : defaultValue;
+});
+
+ipcMain.handle('store-set', async (event, key, value) => {
+  if (store) {
+    store.set(key, value);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('store-delete', async (event, key) => {
+  if (store) {
+    store.delete(key);
+    return true;
+  }
+  return false;
 });
