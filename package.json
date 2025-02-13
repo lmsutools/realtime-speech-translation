@@ -14,8 +14,8 @@
     "@deepgram/sdk": "^3.8.0",
     "@electron/remote": "^2.1.2",
     "@nut-tree-fork/nut-js": "^4.2.4",
-
-    "electron": "^32.1.2"
+    "electron": "^32.1.2",
+    "electron-store": "^10.0.1"
   },
   "devDependencies": {
     "webpack": "^5.97.1",

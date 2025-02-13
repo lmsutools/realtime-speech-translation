@@ -1,17 +1,16 @@
 const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
-const { simulatePaste } = require('./modules/typing/typing.js'); // Use require
+const { simulatePaste } = require('./modules/typing/typing.js');
 
 let mainWindow;
 let settingsWindow;
-let typingAppWindow = null; // Reference for Typing App window
-let isRecording = false;    // Track recording state globally
-let currentGlobalShortcut = 'CommandOrControl+Shift+T'; // Default global shortcut
+let typingAppWindow = null;
+let isRecording = false;
+let currentGlobalShortcut = 'CommandOrControl+Shift+T';
+let store;
 
 function registerGlobalShortcut(shortcut) {
-  // Unregister any existing shortcuts
   globalShortcut.unregisterAll();
   currentGlobalShortcut = shortcut;
-  // Register the new global shortcut
   globalShortcut.register(shortcut, () => {
     if (mainWindow) {
       mainWindow.webContents.send('global-toggle-recording');
@@ -30,11 +29,7 @@ function createWindow() {
     },
     autoHideMenuBar: true,
   });
-
   mainWindow.loadFile('index.html');
-
-  // Register the default global shortcut
-  registerGlobalShortcut(currentGlobalShortcut);
 }
 
 function createSettingsWindow() {
@@ -42,7 +37,6 @@ function createSettingsWindow() {
     settingsWindow.focus();
     return;
   }
-
   settingsWindow = new BrowserWindow({
     width: 400,
     height: 500,
@@ -52,40 +46,32 @@ function createSettingsWindow() {
     },
     autoHideMenuBar: true,
   });
-
   settingsWindow.loadFile('modules/settings/settings.html');
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
 }
 
-// -------------------- Typing App Window --------------------
 function createTypingAppWindow() {
   if (typingAppWindow) {
     typingAppWindow.focus();
     return;
   }
-
-  // Minimize main window
   if (mainWindow) {
     mainWindow.minimize();
   }
-
   typingAppWindow = new BrowserWindow({
     width: 400,
     height: 200,
     alwaysOnTop: true,
-    frame: true, // can be set to false for a frameless look
-    transparent: false, // Opacity will be controlled in the HTML/CSS
+    frame: true,
+    transparent: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-    }
+    },
   });
-
   typingAppWindow.loadFile('modules/typing/typing-app.html');
-
-  // On close: restore main window and stop recording
   typingAppWindow.on('closed', () => {
     typingAppWindow = null;
     if (mainWindow) {
@@ -95,9 +81,14 @@ function createTypingAppWindow() {
   });
 }
 
-// -----------------------------------------------------------
-
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  const StoreModule = await import('electron-store');
+  const Store = StoreModule.default;
+  store = new Store();
+  currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
+  registerGlobalShortcut(currentGlobalShortcut);
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   globalShortcut.unregisterAll();
@@ -108,7 +99,6 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// -------------------- IPC HANDLERS --------------------
 ipcMain.handle('paste-text', async (event, text) => {
   try {
     await simulatePaste(text);
@@ -135,7 +125,6 @@ ipcMain.on('model-setting-changed', (event, selectedModel) => {
   }
 });
 
-// -------------------- Typing App IPC --------------------
 ipcMain.on('open-typing-app', () => {
   createTypingAppWindow();
 });
@@ -153,7 +142,9 @@ ipcMain.on('typing-app-recording-state-changed', (event, recording) => {
   }
 });
 
-// NEW: Update global shortcut from settings
 ipcMain.on('update-global-shortcut', (event, newShortcut) => {
   registerGlobalShortcut(newShortcut);
+  if (store) {
+    store.set('typingAppGlobalShortcut', newShortcut);
+  }
 });

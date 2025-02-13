@@ -3,104 +3,7 @@
 <head>
   <title>Settings</title>
   <link rel="stylesheet" href="../../styles.css">
-  <style>
-    body {
-      padding: 20px;
-    }
-    .tab-buttons {
-      display: flex;
-      margin-bottom: 10px;
-    }
-    .tab-button {
-      padding: 8px 15px;
-      border: 1px solid #ccc;
-      border-bottom: none;
-      background-color: #f0f0f0;
-      cursor: pointer;
-      border-radius: 5px 5px 0 0;
-    }
-    .tab-button.active {
-      background-color: #ddd;
-    }
-    .tab-content {
-      border: 1px solid #ccc;
-      padding: 15px;
-      border-radius: 0 0 5px 5px;
-    }
-    .tab-pane {
-      display: none;
-    }
-    .tab-pane.active {
-      display: block;
-    }
-    .setting-group {
-      margin-bottom: 15px;
-    }
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: bold;
-    }
-    select,
-    input[type="checkbox"],
-    input[type="text"],
-    textarea {
-      width: 100%;
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-    }
-    textarea {
-      font-family: monospace;
-      height: 100px;
-    }
-    .provider-settings {
-      border: 1px solid #eee;
-      padding: 10px;
-      margin-bottom: 10px;
-      border-radius: 5px;
-      background-color: #fafafa;
-    }
-    .provider-settings h3 {
-      margin-top: 0;
-      margin-bottom: 10px;
-      color: #555;
-    }
-    #providerList {
-      margin-bottom: 15px;
-    }
-    .provider-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px;
-      border-bottom: 1px solid #eee;
-    }
-    .provider-item:last-child {
-      border-bottom: none;
-    }
-    .provider-actions button {
-      margin-left: 5px;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-    #addProviderButton,
-    #saveProviderButton,
-    #cancelProviderButton {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      padding: 8px 15px;
-      margin-top: 10px;
-    }
-    #cancelProviderButton,
-    .provider-actions .delete-provider {
-      background-color: #f44336;
-    }
-  </style>
+  <link rel="stylesheet" href="settings.css">
 </head>
 <body>
   <h1>Settings</h1>
@@ -180,14 +83,11 @@
     document.addEventListener('DOMContentLoaded', () => {
       const tabButtons = document.querySelectorAll('.tab-button');
       const tabPanes = document.querySelectorAll('.tab-pane');
-
       tabButtons.forEach(button => {
         button.addEventListener('click', () => {
           const tabName = button.dataset.tab;
-
           tabButtons.forEach(btn => btn.classList.remove('active'));
           tabPanes.forEach(pane => pane.classList.remove('active'));
-
           button.classList.add('active');
           document.getElementById(tabName).classList.add('active');
         });
