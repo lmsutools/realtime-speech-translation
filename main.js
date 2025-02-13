@@ -1,3 +1,4 @@
+// (Full modified file with added IPC listener for resizing the settings window)
 const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const { simulatePaste } = require('./modules/typing/typing.js');
 
@@ -82,29 +83,25 @@ function createTypingAppWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Dynamically import electron-store to avoid webpack ESM issues.
   const StoreModule = await import('electron-store');
   const Store = StoreModule.default;
   store = new Store({
     defaults: {
-      model: 'nova-2',                   // Speech model
-      sourceLanguage: 'multi',           // Speech language
+      model: 'nova-2',
+      sourceLanguage: 'multi',
       defaultInputDevice: '',
       diarizationEnabled: false,
       enableTranslation: false,
       deepgramApiKey: '',
-      translateDefaultAiProvider: 'Google AI',  // Translation default provider
-      translateDefaultAiModel: 'gemini-2.0-flash-001', // Translation default model
+      translateDefaultAiProvider: 'Google AI',
+      translateDefaultAiModel: 'gemini-2.0-flash-001',
       aiProviders: '[]',
       typingAppGlobalShortcut: 'CommandOrControl+Shift+T',
       targetLanguage: 'en'
     }
   });
-
-  // Load global shortcut from persistent store.
   currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
   registerGlobalShortcut(currentGlobalShortcut);
-
   createWindow();
 });
 
@@ -167,7 +164,6 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
   }
 });
 
-// ---------------------- Persistent Store IPC Handlers ----------------------
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
   return store ? store.get(key, defaultValue) : defaultValue;
 });
@@ -186,4 +182,13 @@ ipcMain.handle('store-delete', async (event, key) => {
     return true;
   }
   return false;
+});
+
+// NEW: IPC listener to resize the settings window based on content height.
+ipcMain.on('resize-settings-window', (event, height) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    const [width] = win.getContentSize();
+    win.setContentSize(width, height);
+  }
 });
