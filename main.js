@@ -3,8 +3,21 @@ const { simulatePaste } = require('./modules/typing/typing.js'); // Use require
 
 let mainWindow;
 let settingsWindow;
-let typingAppWindow = null; // Keep reference to the Typing App window
+let typingAppWindow = null; // Reference for Typing App window
 let isRecording = false;    // Track recording state globally
+let currentGlobalShortcut = 'CommandOrControl+Shift+T'; // Default global shortcut
+
+function registerGlobalShortcut(shortcut) {
+  // Unregister any existing shortcuts
+  globalShortcut.unregisterAll();
+  currentGlobalShortcut = shortcut;
+  // Register the new global shortcut
+  globalShortcut.register(shortcut, () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('global-toggle-recording');
+    }
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,14 +33,8 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // Register global hotkey: Ctrl+Shift+T to toggle start/stop
-  app.whenReady().then(() => {
-    globalShortcut.register('CommandOrControl+Shift+T', () => {
-      if (!mainWindow) return;
-      // Send message to main renderer: "toggle recording"
-      mainWindow.webContents.send('global-toggle-recording');
-    });
-  });
+  // Register the default global shortcut
+  registerGlobalShortcut(currentGlobalShortcut);
 }
 
 function createSettingsWindow() {
@@ -52,10 +59,9 @@ function createSettingsWindow() {
   });
 }
 
-// -------------------- NEW: Typing App Window --------------------
+// -------------------- Typing App Window --------------------
 function createTypingAppWindow() {
   if (typingAppWindow) {
-    // If already open, just focus it
     typingAppWindow.focus();
     return;
   }
@@ -65,13 +71,12 @@ function createTypingAppWindow() {
     mainWindow.minimize();
   }
 
-  // Create the mini “Typing App” window
   typingAppWindow = new BrowserWindow({
     width: 400,
     height: 200,
     alwaysOnTop: true,
-    frame: true,  // set to false to make it frameless
-    transparent: false, // we will control the opacity with CSS in the content
+    frame: true, // can be set to false for a frameless look
+    transparent: false, // Opacity will be controlled in the HTML/CSS
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -80,25 +85,22 @@ function createTypingAppWindow() {
 
   typingAppWindow.loadFile('modules/typing/typing-app.html');
 
-  // On close: restore main window, stop recording, and reset reference
+  // On close: restore main window and stop recording
   typingAppWindow.on('closed', () => {
     typingAppWindow = null;
-    // Notify renderer to stop recording
     if (mainWindow) {
       mainWindow.restore();
-      mainWindow.webContents.send('typing-app-window-closed'); 
+      mainWindow.webContents.send('typing-app-window-closed');
     }
   });
 }
 
-// ---------------------------------------------------------------
+// -----------------------------------------------------------
 
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  // Unregister all shortcuts
   globalShortcut.unregisterAll();
-
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -107,53 +109,51 @@ app.on('activate', () => {
 });
 
 // -------------------- IPC HANDLERS --------------------
-
-// For text-pasting from the renderer
 ipcMain.handle('paste-text', async (event, text) => {
   try {
-    await simulatePaste(text); // Call the function from the typing module
-    return true; // Indicate success
+    await simulatePaste(text);
+    return true;
   } catch (error) {
     console.error('Error in paste-text handler:', error);
-    return false; // Indicate failure
+    return false;
   }
 });
 
-// Opens the Settings window
 ipcMain.on('open-settings', () => {
   createSettingsWindow();
 });
 
-// For translation setting changes -> updates the main window UI
 ipcMain.on('translation-setting-changed', (event, enableTranslation) => {
   if (mainWindow) {
     mainWindow.webContents.send('update-translation-ui', enableTranslation);
   }
 });
 
-// For model setting changes -> updates the main window’s source languages
 ipcMain.on('model-setting-changed', (event, selectedModel) => {
   if (mainWindow) {
     mainWindow.webContents.send('update-source-languages', selectedModel);
   }
 });
 
-// -------------------- NEW: Typing App IPC --------------------
+// -------------------- Typing App IPC --------------------
 ipcMain.on('open-typing-app', () => {
   createTypingAppWindow();
 });
 
-// Forward transcript updates from renderer to typing-app window
 ipcMain.on('typing-app-transcript-updated', (event, fullText) => {
   if (typingAppWindow) {
     typingAppWindow.webContents.send('typing-app-update-text', fullText);
   }
 });
 
-// Forward recording state changes to typing-app window
 ipcMain.on('typing-app-recording-state-changed', (event, recording) => {
   isRecording = recording;
   if (typingAppWindow) {
     typingAppWindow.webContents.send('typing-app-recording-state', isRecording);
   }
+});
+
+// NEW: Update global shortcut from settings
+ipcMain.on('update-global-shortcut', (event, newShortcut) => {
+  registerGlobalShortcut(newShortcut);
 });
