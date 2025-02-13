@@ -1,6 +1,9 @@
-// (Full modified file with added IPC listener for resizing the settings window)
+//never add any comments at the same line of the reference file path
 const { app, BrowserWindow, ipcMain, globalShortcut } = require('electron');
 const { simulatePaste } = require('./modules/typing/typing.js');
+
+// Import our new windowState module
+const { restoreWindowState, saveWindowState } = require('./modules/windowState.js');
 
 let mainWindow;
 let settingsWindow;
@@ -19,10 +22,16 @@ function registerGlobalShortcut(shortcut) {
   });
 }
 
-function createWindow() {
+function createMainWindow() {
+  // Restore window state for "mainWindowState"
+  const mainDefaults = { width: 800, height: 600 };
+  const { x, y, width, height } = restoreWindowState(store, 'mainWindowState', mainDefaults);
+
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    x,
+    y,
+    width,
+    height,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -31,6 +40,9 @@ function createWindow() {
     autoHideMenuBar: true,
   });
   mainWindow.loadFile('index.html');
+
+  // Save window state on move/resize/close
+  saveWindowState(store, 'mainWindowState', mainWindow);
 }
 
 function createSettingsWindow() {
@@ -38,9 +50,16 @@ function createSettingsWindow() {
     settingsWindow.focus();
     return;
   }
+
+  // We can similarly store settingsWindow size/position if desired:
+  const settingsDefaults = { width: 400, height: 500 };
+  const { x, y, width, height } = restoreWindowState(store, 'settingsWindowState', settingsDefaults);
+
   settingsWindow = new BrowserWindow({
-    width: 400,
-    height: 500,
+    x,
+    y,
+    width,
+    height,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -51,6 +70,9 @@ function createSettingsWindow() {
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
+
+  // track settings window bounds
+  saveWindowState(store, 'settingsWindowState', settingsWindow);
 }
 
 function createTypingAppWindow() {
@@ -61,9 +83,16 @@ function createTypingAppWindow() {
   if (mainWindow) {
     mainWindow.minimize();
   }
+
+  // If we want to track the typing window also
+  const typingDefaults = { width: 400, height: 200 };
+  const { x, y, width, height } = restoreWindowState(store, 'typingAppWindowState', typingDefaults);
+
   typingAppWindow = new BrowserWindow({
-    width: 400,
-    height: 200,
+    x,
+    y,
+    width,
+    height,
     alwaysOnTop: true,
     frame: true,
     transparent: false,
@@ -80,9 +109,12 @@ function createTypingAppWindow() {
       mainWindow.webContents.send('typing-app-window-closed');
     }
   });
+
+  saveWindowState(store, 'typingAppWindowState', typingAppWindow);
 }
 
 app.whenReady().then(async () => {
+  // Import electron-store dynamically to avoid ESM issues
   const StoreModule = await import('electron-store');
   const Store = StoreModule.default;
   store = new Store({
@@ -100,9 +132,11 @@ app.whenReady().then(async () => {
       targetLanguage: 'en'
     }
   });
+
   currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
   registerGlobalShortcut(currentGlobalShortcut);
-  createWindow();
+
+  createMainWindow();
 });
 
 app.on('window-all-closed', () => {
@@ -111,9 +145,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
 });
 
+// =============== Existing IPC Logic Below ===============
 ipcMain.handle('paste-text', async (event, text) => {
   try {
     await simulatePaste(text);
@@ -164,6 +199,7 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
   }
 });
 
+// electron-store bridging
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
   return store ? store.get(key, defaultValue) : defaultValue;
 });
@@ -182,13 +218,4 @@ ipcMain.handle('store-delete', async (event, key) => {
     return true;
   }
   return false;
-});
-
-// NEW: IPC listener to resize the settings window based on content height.
-ipcMain.on('resize-settings-window', (event, height) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (win) {
-    const [width] = win.getContentSize();
-    win.setContentSize(width, height);
-  }
 });
