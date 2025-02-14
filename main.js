@@ -15,7 +15,7 @@ app.isQuiting = false; // flag to indicate if the app is quitting
 
 // Define the shared icon and app title
 const iconPath = path.join(__dirname, 'assets', 'icons', 'talking.png');
-const appTitle = 'SonikSpeech & Live Translate';
+const appTitle = 'ScribeFlow & Translate';
 
 function registerGlobalShortcut(shortcut) {
   globalShortcut.unregisterAll();
