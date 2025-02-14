@@ -4,39 +4,67 @@
   <meta charset="utf-8">
   <title>Typing App</title>
   <style>
-    body {
+    html, body {
       margin: 0;
       padding: 0;
-      /* 49% opacity set here or in the BrowserWindow. We'll do it here. */
-      background-color: rgba(255, 255, 255, 0.51);
-      font-family: Arial, sans-serif;
+      width: 100%;
       height: 100%;
-      overflow: hidden;
-      position: relative;
+      background: transparent;
     }
-    #typingAppText {
+    .container {
+      width: 100%;
+      height: 100%;
       padding: 10px;
-      font-size: 16px;
-      color: #000;
-      /* Optionally set a max-height if scrolling is needed: */
-      /* max-height: 100%; overflow-y: auto; */
+      background-color: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      border-radius: 15px;
+      -webkit-app-region: drag;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    .typing-controls {
+      height: 40px; /* Reserve space for controls */
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      -webkit-app-region: no-drag; /* Allow interaction */
     }
     #recordingIndicator {
-      position: absolute;
-      top: 5px;
-      right: 5px;
       width: 20px;
       height: 20px;
       border-radius: 50%;
-      background-color: red; /* default = not recording */
+      background-color: red;
       border: 2px solid #fff;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .text-container {
+      flex: 1;
+      overflow-y: auto;
+      text-align: justify;
+      -webkit-app-region: no-drag;
+      box-sizing: border-box;
+    }
+    .text-container::-webkit-scrollbar {
+      display: none; /* Hide scrollbar */
+    }
+    #typingAppText {
+      margin: 0;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
-  <div id="typingAppText">(Waiting for transcript...)</div>
-  <div id="recordingIndicator"></div>
-
+  <div class="container">
+    <div class="typing-controls" id="typing-controls">
+      <div id="recordingIndicator"></div>
+    </div>
+    <div class="text-container" id="typingAppTextContainer">
+      <div id="typingAppText">(Waiting for transcript...)</div>
+    </div>
+  </div>
   <script src="./typing-app.js"></script>
 </body>
 </html>

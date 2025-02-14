@@ -2,6 +2,7 @@ import { translateWithAI } from './translation.js';
 import { pasteText } from './utils.js';
 import { isInputDeviceAvailable } from './devices.js';
 import { getStoreValue } from './storeBridge.js';
+import { ipcRenderer } from 'electron';
 
 let mediaRecorder;
 let socket;
@@ -84,7 +85,7 @@ export async function startRecording() {
                     document.getElementById('source-text').textContent = finalTranscription + " " + transcript;
                 }
                 const pasteOption = document.getElementById('pasteOption').value;
-                // Paste only the current finalized transcript (not the full accumulated text)
+                // Paste only the current finalized transcript chunk when paste mode is "source"
                 if (pasteOption === 'source' && parsed.is_final) {
                     pasteText(transcript);
                 }
@@ -108,6 +109,7 @@ export async function startRecording() {
         socket.onopen = () => {
             document.getElementById('source-text').textContent = '';
             mediaRecorder.start(50);
+            ipcRenderer.send('typing-app-recording-state-changed', true);
             console.log('MediaRecorder started');
             console.log("Using AI Provider on Start:", defaultAiProvider.name);
             console.log("Using AI Model on Start:", defaultAiModel);
@@ -133,6 +135,7 @@ export function stopRecording() {
         socket.close();
         socket = null;
     }
+    ipcRenderer.send('typing-app-recording-state-changed', false);
     document.getElementById('start').style.display = 'block';
     document.getElementById('stop').style.display = 'none';
 }
