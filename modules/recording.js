@@ -10,6 +10,7 @@ let transcriptions = [];
 let translations = [];
 let deepgramCaptions = [];
 let finalTranscription = "";
+let autoStopTimerId = null;
 
 export async function startRecording() {
     // Reset socket to null at the BEGINNING.
@@ -106,13 +107,20 @@ export async function startRecording() {
         socket.onclose = () => {
             console.log('WebSocket connection closed');
         };
-        socket.onopen = () => {
+        socket.onopen = async () => {
             document.getElementById('source-text').textContent = '';
             mediaRecorder.start(50);
             ipcRenderer.send('typing-app-recording-state-changed', true);
             console.log('MediaRecorder started');
             console.log("Using AI Provider on Start:", defaultAiProvider.name);
             console.log("Using AI Model on Start:", defaultAiModel);
+            // Set up auto stop timer based on setting (in minutes)
+            const autoStopTimer = await getStoreValue('autoStopTimer', 60);
+            autoStopTimerId = setTimeout(() => {
+              stopRecording();
+              const stopMsg = "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED, CHECK SETTINGS---";
+              document.getElementById('source-text').textContent += stopMsg;
+            }, autoStopTimer * 60000);
         };
         mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
@@ -136,6 +144,10 @@ export function stopRecording() {
         socket = null;
     }
     ipcRenderer.send('typing-app-recording-state-changed', false);
+    if (autoStopTimerId) {
+      clearTimeout(autoStopTimerId);
+      autoStopTimerId = null;
+    }
     document.getElementById('start').style.display = 'block';
     document.getElementById('stop').style.display = 'none';
 }

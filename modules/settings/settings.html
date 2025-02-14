@@ -8,45 +8,50 @@
 <body>
   <h1>Settings</h1>
   <div class="tab-buttons">
-    <button class="tab-button active" data-tab="speech">Speech</button>
-    <button class="tab-button" data-tab="translate">Translate</button>
+    <button class="tab-button active" data-tab="speech">Speech</button> 
+    <button class="tab-button" data-tab="translate">Translate</button> 
     <button class="tab-button" data-tab="typingApp">Typing App</button>
   </div>
   <div class="tab-content">
     <div id="speech" class="tab-pane active">
-      <!-- Speech tab content -->
       <div class="setting-group">
-        <label for="deepgramApiKey">Deepgram API Key:</label>
+        <label for="deepgramApiKey">Deepgram API Key:</label> 
         <input type="text" id="deepgramApiKey" placeholder="Enter your Deepgram API Key">
       </div>
       <div class="setting-group">
-        <label for="model">Model:</label>
+        <label for="model">Model:</label> 
         <select id="model">
           <option value="nova-2">nova-2</option>
           <option value="nova-3">nova-3</option>
         </select>
       </div>
       <div class="setting-group">
-        <label for="inputDeviceSettings">Input Device:</label>
+        <label for="inputDeviceSettings">Input Device:</label> 
         <select id="inputDeviceSettings"></select>
       </div>
       <div class="setting-group">
-        <label for="diarizationSettings">Enable Diarization:</label>
+        <label for="diarizationSettings">Enable Diarization:</label> 
         <input type="checkbox" id="diarizationSettings">
       </div>
       <div class="setting-group">
-        <label for="enableTranslationSettings">Enable Translation:</label>
+        <label for="enableTranslationSettings">Enable Translation:</label> 
         <input type="checkbox" id="enableTranslationSettings" checked="checked">
+      </div>
+      <div class="setting-group">
+        <label for="autoStopTimer">
+          Auto Stop Timer (minutes):
+          <span title="Set a timer (in minutes) to auto stop transcription to avoid excessive API usage if left running.">(?)</span>
+        </label>
+        <input type="number" id="autoStopTimer" placeholder="Enter minutes" value="60" min="1">
       </div>
     </div>
     <div id="translate" class="tab-pane">
-      <!-- Translate tab content -->
       <div class="setting-group">
-        <label for="defaultAiProviderSelect">Default AI Provider:</label>
+        <label for="defaultAiProviderSelect">Default AI Provider:</label> 
         <select id="defaultAiProviderSelect"></select>
       </div>
       <div class="setting-group">
-        <label for="defaultAiModelSelect">Default Model:</label>
+        <label for="defaultAiModelSelect">Default Model:</label> 
         <select id="defaultAiModelSelect"></select>
       </div>
       <div id="providerList"></div>
@@ -54,28 +59,26 @@
       <div id="providerEditForm" class="provider-settings" style="display:none;">
         <h3>Provider Settings</h3>
         <div class="setting-group">
-          <label for="providerName">Provider Name:</label>
+          <label for="providerName">Provider Name:</label> 
           <input type="text" id="providerName" placeholder="Provider Name">
         </div>
         <div class="setting-group">
-          <label for="providerApiKey">API Key:</label>
+          <label for="providerApiKey">API Key:</label> 
           <input type="text" id="providerApiKey" placeholder="Enter your API Key">
         </div>
         <div class="setting-group">
-          <label for="providerModels">Models (comma-separated):</label>
+          <label for="providerModels">Models (comma-separated):</label> 
           <textarea id="providerModels" placeholder="Enter models, comma-separated"></textarea>
         </div>
         <div class="setting-group">
-          <label for="providerEndpoint">API Endpoint:</label>
+          <label for="providerEndpoint">API Endpoint:</label> 
           <input type="text" id="providerEndpoint" placeholder="API Endpoint">
         </div>
-        <button id="saveProviderButton">Save Provider</button>
+        <button id="saveProviderButton">Save Provider</button> 
         <button id="cancelProviderButton">Cancel</button>
       </div>
     </div>
-    <div id="typingApp" class="tab-pane">
-      <!-- The Typing App tab content will be loaded by modules/settings/typingApp.js -->
-    </div>
+    <div id="typingApp" class="tab-pane"></div>
   </div>
   <script src="../../dist/settings.js"></script>
   <script src="settingsRenderer.js"></script>

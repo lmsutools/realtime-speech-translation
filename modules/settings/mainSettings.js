@@ -29,23 +29,32 @@ export async function loadSettings() {
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
-
+  const autoStopTimerInput = document.getElementById('autoStopTimer');
+  
   // Use storeBridge to load persistent settings with defaults
   const model = await getStoreValue('model', 'nova-2');
   modelSelect.value = model;
+  
   const defaultInputDevice = await getStoreValue('defaultInputDevice', '');
   populateInputDevices('inputDeviceSettings').then(() => {
     if (defaultInputDevice) {
       inputDeviceSettingsSelect.value = defaultInputDevice;
     }
   });
+  
   const diarizationEnabled = await getStoreValue('diarizationEnabled', false);
   diarizationSettingsCheckbox.checked = diarizationEnabled;
+  
   const enableTranslation = await getStoreValue('enableTranslation', false);
   enableTranslationSettingsCheckbox.checked = enableTranslation;
+  
   const deepgramApiKey = await getStoreValue('deepgramApiKey', '');
   deepgramApiKeyInput.value = deepgramApiKey;
-
+  
+  // Load Auto Stop Timer setting (in minutes)
+  const autoStopTimer = await getStoreValue('autoStopTimer', 60);
+  autoStopTimerInput.value = autoStopTimer;
+  
   // Load Translate Tab Settings
   loadProviderSettings();
 }
@@ -56,7 +65,8 @@ export async function saveSettings() {
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
-
+  const autoStopTimerInput = document.getElementById('autoStopTimer');
+  
   if (modelSelect) {
     await setStoreValue('model', modelSelect.value);
   }
@@ -73,9 +83,12 @@ export async function saveSettings() {
   if (deepgramApiKeyInput) {
     await setStoreValue('deepgramApiKey', deepgramApiKeyInput.value);
   }
-
+  // Save Auto Stop Timer setting
+  if (autoStopTimerInput) {
+    await setStoreValue('autoStopTimer', autoStopTimerInput.value);
+  }
+  
   saveProviderSettings();
-
   const apiKey = deepgramApiKeyInput.value;
   const result = await validateDeepgramToken(apiKey);
   ipcRenderer.send('deepgram-validation-result', result);
@@ -87,9 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
-
   initializeSettingsUI();
-
   if (modelSelect) {
     modelSelect.addEventListener('change', () => {
       saveSettings();
@@ -108,7 +119,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (deepgramApiKeyInput) {
     deepgramApiKeyInput.addEventListener('input', saveSettings);
   }
-
+  // Listen for changes in Auto Stop Timer field
+  const autoStopTimerInput = document.getElementById('autoStopTimer');
+  if (autoStopTimerInput) {
+    autoStopTimerInput.addEventListener('change', saveSettings);
+  }
   initializeProviderSettingsUI();
   await loadSettings();
 });
