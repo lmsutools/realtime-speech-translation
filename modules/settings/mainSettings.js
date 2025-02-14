@@ -24,17 +24,13 @@ async function validateDeepgramToken(apiKey) {
 }
 
 export async function loadSettings() {
-  const modelSelect = document.getElementById('model');
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
   
-  // Use storeBridge to load persistent settings with defaults
-  const model = await getStoreValue('model', 'nova-2');
-  modelSelect.value = model;
-  
+  // Load persistent settings
   const defaultInputDevice = await getStoreValue('defaultInputDevice', '');
   populateInputDevices('inputDeviceSettings').then(() => {
     if (defaultInputDevice) {
@@ -60,16 +56,12 @@ export async function loadSettings() {
 }
 
 export async function saveSettings() {
-  const modelSelect = document.getElementById('model');
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
   
-  if (modelSelect) {
-    await setStoreValue('model', modelSelect.value);
-  }
   if (inputDeviceSettingsSelect) {
     await setStoreValue('defaultInputDevice', inputDeviceSettingsSelect.value);
   }
@@ -95,18 +87,13 @@ export async function saveSettings() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const modelSelect = document.getElementById('model');
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
   const diarizationSettingsCheckbox = document.getElementById('diarizationSettings');
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
+  
   initializeSettingsUI();
-  if (modelSelect) {
-    modelSelect.addEventListener('change', () => {
-      saveSettings();
-      ipcRenderer.send('model-setting-changed', modelSelect.value);
-    });
-  }
+  
   if (inputDeviceSettingsSelect) {
     inputDeviceSettingsSelect.addEventListener('change', saveSettings);
   }
@@ -124,6 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (autoStopTimerInput) {
     autoStopTimerInput.addEventListener('change', saveSettings);
   }
+  
   initializeProviderSettingsUI();
   await loadSettings();
 });

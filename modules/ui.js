@@ -14,10 +14,10 @@ export function updateLanguageOptions(languageSelect, model) {
   languageSelect.innerHTML = '';
   const options = (model === 'nova-2')
     ? [
-        { value: 'en-US', text: 'English (US)' },
-        { value: 'es-ES', text: 'Spanish (Spain)' },
+        { value: 'en-US', text: 'English' },
+        { value: 'es-ES', text: 'Spanish' },
         { value: 'zh', text: 'Chinese Mandarin Simplified' },
-        { value: 'multi', text: 'Multi (English + Spanish)' }
+        { value: 'multi', text: 'Multi, English + Spanish' }
       ]
     : [{ value: 'en', text: 'English' }];
   options.forEach(opt => {
@@ -28,32 +28,33 @@ export function updateLanguageOptions(languageSelect, model) {
   });
 }
 
-export async function updateSourceLanguageDropdown(model) {
+export async function updateSourceLanguageDropdown() {
   const sourceLanguageSelect = document.getElementById('sourceLanguage');
-  updateLanguageOptions(sourceLanguageSelect, model);
-  const availableOptions = Array.from(sourceLanguageSelect.options).map(opt => opt.value);
-  const defaultLang = (model === 'nova-3') ? 'en' : 'multi';
-  const storedLang = await getStoreValue('sourceLanguage', defaultLang);
-  const validLang = availableOptions.includes(storedLang) ? storedLang : defaultLang;
-  sourceLanguageSelect.value = validLang;
-  await setStoreValue('sourceLanguage', validLang);
+  sourceLanguageSelect.innerHTML = '';
+  const combinedOptions = [
+    { value: 'nova-2|en-US', text: '(Nova-2) English' },
+    { value: 'nova-2|es-ES', text: '(Nova-2) Spanish' },
+    { value: 'nova-2|zh', text: '(Nova-2) Mandarin Simplified' },
+    { value: 'nova-2|multi', text: '(Nova-2) Multi, English & Spanish' },
+    { value: 'nova-3|en', text: '(Nova-3) English' }
+  ];
+  combinedOptions.forEach(opt => {
+    const optionElement = document.createElement('option');
+    optionElement.value = opt.value;
+    optionElement.text = opt.text;
+    sourceLanguageSelect.appendChild(optionElement);
+  });
+  const storedValue = await getStoreValue('sourceLanguage', 'nova-2|multi');
+  sourceLanguageSelect.value = storedValue;
 }
 
 export async function applySettingsToUI() {
   const enableTranslation = (await getStoreValue('enableTranslation', false)) === true;
-  const model = await getStoreValue('model', 'nova-2');
-  const storedSourceLanguage = await getStoreValue('sourceLanguage', model === 'nova-2' ? 'multi' : 'en');
+  const storedSourceLanguage = await getStoreValue('sourceLanguage', 'nova-2|multi');
   const targetLanguage = await getStoreValue('targetLanguage', 'en');
-
-  // Update Source Language Dropdown with validation.
+  // Update Source Language Dropdown with combined options.
   const sourceLanguageSelect = document.getElementById('sourceLanguage');
-  updateLanguageOptions(sourceLanguageSelect, model);
-  const availableOptions = Array.from(sourceLanguageSelect.options).map(opt => opt.value);
-  const defaultLang = (model === 'nova-3') ? 'en' : 'multi';
-  const validSourceLanguage = availableOptions.includes(storedSourceLanguage) ? storedSourceLanguage : defaultLang;
-  sourceLanguageSelect.value = validSourceLanguage;
-  await setStoreValue('sourceLanguage', validSourceLanguage);
-
+  updateSourceLanguageDropdown();
   // Update Target Language Dropdown.
   const targetLanguageSelect = document.getElementById('targetLanguage');
   targetLanguageSelect.innerHTML = '';
@@ -70,10 +71,7 @@ export async function applySettingsToUI() {
   });
   targetLanguageSelect.value = targetLanguage;
   await setStoreValue('targetLanguage', targetLanguage);
-
   updateTranslationUI(enableTranslation);
-
-  // Listen for changes on the dropdowns to update persistent store.
   sourceLanguageSelect.addEventListener('change', async (e) => {
     await setStoreValue('sourceLanguage', e.target.value);
   });

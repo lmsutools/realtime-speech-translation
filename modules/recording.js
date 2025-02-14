@@ -16,9 +16,9 @@ export async function startRecording() {
     // Reset socket to null at the BEGINNING.
     socket = null;
     try {
-        // Get settings from persistent store
-        const selectedModel = await getStoreValue('model', 'nova-2');
-        const selectedLanguage = await getStoreValue('sourceLanguage', null);
+        // Retrieve combined source language value (format: model|language)
+        const combined = await getStoreValue('sourceLanguage', 'nova-2|multi');
+        const [selectedModel, selectedLanguage] = combined.split("|");
         const targetLanguage = await getStoreValue('targetLanguage', 'en');
         const diarizationEnabled = (await getStoreValue('diarizationEnabled', false)) === true;
         const translationEnabled = (await getStoreValue('enableTranslation', false)) === true;
