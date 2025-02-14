@@ -70,7 +70,6 @@ export async function startRecording() {
                 console.log(transcript);
                 deepgramCaptions.push(parsed);
                 console.log("Deepgram captions array:", deepgramCaptions);
-
                 // Handle the display of interim vs. final transcripts
                 if (parsed.is_final) {
                     // Append final transcript and update the display permanently
@@ -84,8 +83,8 @@ export async function startRecording() {
                     // Interim result: display final text plus the current interim transcript
                     document.getElementById('source-text').textContent = finalTranscription + " " + transcript;
                 }
-
                 const pasteOption = document.getElementById('pasteOption').value;
+                // Paste only the current finalized transcript (not the full accumulated text)
                 if (pasteOption === 'source' && parsed.is_final) {
                     pasteText(transcript);
                 }
