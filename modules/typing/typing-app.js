@@ -1,6 +1,6 @@
 const { ipcRenderer } = require('electron');
 
-// When the window is about to close, notify the main process if needed
+// When the window is about to close, we notify the main process if needed
 window.onbeforeunload = () => {
   // Cleanup if necessary
 };
@@ -19,7 +19,32 @@ ipcRenderer.on('typing-app-recording-state', (event, isRecording) => {
   indicator.style.backgroundColor = isRecording ? 'green' : 'red';
 });
 
-// Toggle transcription on click of the recording indicator
-document.getElementById('recordingIndicator').addEventListener('click', () => {
+// -------------------------------------------------------
+// Toggle for typing/pasting mechanism
+// -------------------------------------------------------
+let typingActive = false; // default inactive
+const typingToggleIcon = document.getElementById('typingToggleIcon');
+const ACTIVE_ICON_PATH = '../../assets/icons/typing-active.png';
+const INACTIVE_ICON_PATH = '../../assets/icons/typing-inactive.png';
+
+function updateTypingIcon() {
+  typingToggleIcon.src = typingActive ? ACTIVE_ICON_PATH : INACTIVE_ICON_PATH;
+}
+
+// On click, toggle the state and inform the rest of the app
+typingToggleIcon.addEventListener('click', () => {
+  typingActive = !typingActive;
+  updateTypingIcon();
+  ipcRenderer.send('typing-app-typing-mode-changed', typingActive);
+});
+
+// Initialize the icon on load
+updateTypingIcon();
+
+// -------------------------------------------------------
+// NEW: Add click event for the recording indicator to toggle transcription
+// -------------------------------------------------------
+const recordingIndicator = document.getElementById('recordingIndicator');
+recordingIndicator.addEventListener('click', () => {
   ipcRenderer.send('global-toggle-recording');
 });

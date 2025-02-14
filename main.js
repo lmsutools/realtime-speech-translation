@@ -40,7 +40,6 @@ function createMainWindow() {
   mainWindow.loadFile('index.html');
   saveWindowState(store, 'mainWindowState', mainWindow);
 
-  // If mainWindow is closed, set reference to null
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -78,7 +77,6 @@ function createTypingAppWindow() {
     typingAppWindow.focus();
     return;
   }
-  // Minimizes main if open
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.minimize();
   }
@@ -102,16 +100,13 @@ function createTypingAppWindow() {
   });
 
   typingAppWindow.loadFile('modules/typing/typing-app.html');
-
   typingAppWindow.on('closed', () => {
     typingAppWindow = null;
-    // Only restore mainWindow if it exists and isn't destroyed
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.restore();
       mainWindow.webContents.send('typing-app-window-closed');
     }
   });
-
   saveWindowState(store, 'typingAppWindowState', typingAppWindow);
 }
 
@@ -120,7 +115,6 @@ app.whenReady().then(async () => {
   const Store = StoreModule.default;
   store = new Store({
     defaults: {
-      model: 'nova-2',
       sourceLanguage: 'nova-2|multi',
       defaultInputDevice: '',
       diarizationEnabled: false,
@@ -133,6 +127,7 @@ app.whenReady().then(async () => {
       targetLanguage: 'en'
     }
   });
+
   currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
   registerGlobalShortcut(currentGlobalShortcut);
   createMainWindow();
@@ -191,6 +186,13 @@ ipcMain.on('typing-app-recording-state-changed', (event, recording) => {
   }
 });
 
+// NEW: forward the typing-mode-changed event to the main window
+ipcMain.on('typing-app-typing-mode-changed', (event, typingActive) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('typing-app-typing-mode-changed', typingActive);
+  }
+});
+
 ipcMain.on('global-toggle-recording', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('global-toggle-recording');
@@ -208,7 +210,6 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
   return store ? store.get(key, defaultValue) : defaultValue;
 });
-
 ipcMain.handle('store-set', async (event, key, value) => {
   if (store) {
     store.set(key, value);
@@ -216,7 +217,6 @@ ipcMain.handle('store-set', async (event, key, value) => {
   }
   return false;
 });
-
 ipcMain.handle('store-delete', async (event, key) => {
   if (store) {
     store.delete(key);
