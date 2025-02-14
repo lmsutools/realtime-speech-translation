@@ -4,6 +4,16 @@ import { getStoreValue, setStoreValue } from '../storeBridge.js';
 import { loadProviderSettings, saveProviderSettings, initializeProviderSettingsUI } from './providerSettings.js';
 import { initializeSettingsUI } from './uiSettings.js';
 
+// Debounce function to limit how often a function is called
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), wait);
+  };
+}
+
 async function validateDeepgramToken(apiKey) {
   if (!apiKey) {
     return { status: "not_set", message: "Deepgram API key is not set. Please set it in settings." };
@@ -103,8 +113,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (enableTranslationSettingsCheckbox) {
     enableTranslationSettingsCheckbox.addEventListener('change', saveSettings);
   }
+  // Use a debounced version of saveSettings for deepgram API key input to avoid excessive validation requests
   if (deepgramApiKeyInput) {
-    deepgramApiKeyInput.addEventListener('input', saveSettings);
+    const debouncedSaveSettings = debounce(saveSettings, 500);
+    deepgramApiKeyInput.addEventListener('input', debouncedSaveSettings);
   }
   // Listen for changes in Auto Stop Timer field
   const autoStopTimerInput = document.getElementById('autoStopTimer');
