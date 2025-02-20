@@ -2,21 +2,28 @@ const { ipcRenderer } = require('electron');
 
 // When the window is about to close, we notify the main process if needed
 window.onbeforeunload = () => {
-  // Cleanup if necessary
+    // Cleanup if necessary
 };
 
 // Listen for transcription updates and auto-scroll to the bottom
 ipcRenderer.on('typing-app-update-text', (event, fullText) => {
-  const typingAppText = document.getElementById('typingAppText');
-  const textContainer = document.getElementById('typingAppTextContainer');
-  typingAppText.textContent = fullText;
-  textContainer.scrollTop = textContainer.scrollHeight;
+    const typingAppText = document.getElementById('typingAppText');
+    const textContainer = document.getElementById('typingAppTextContainer');
+    typingAppText.textContent = fullText;
+    textContainer.scrollTop = textContainer.scrollHeight;
 });
 
 // Listen for recording state changes to update the recording indicator color
 ipcRenderer.on('typing-app-recording-state', (event, isRecording) => {
-  const indicator = document.getElementById('recordingIndicator');
-  indicator.style.backgroundColor = isRecording ? 'green' : 'red';
+    const indicator = document.getElementById('recordingIndicator');
+    indicator.style.backgroundColor = isRecording ? 'green' : 'red';
+});
+
+// NEW: Listen for reset command from main process
+ipcRenderer.on('reset-typing-app', () => {
+    const typingAppText = document.getElementById('typingAppText');
+    typingAppText.textContent = '';
+    console.log('Typing app text reset');
 });
 
 // -------------------------------------------------------
@@ -28,14 +35,14 @@ const ACTIVE_ICON_PATH = '../../assets/icons/typing-active.png';
 const INACTIVE_ICON_PATH = '../../assets/icons/typing-inactive.png';
 
 function updateTypingIcon() {
-  typingToggleIcon.src = typingActive ? ACTIVE_ICON_PATH : INACTIVE_ICON_PATH;
+    typingToggleIcon.src = typingActive ? ACTIVE_ICON_PATH : INACTIVE_ICON_PATH;
 }
 
 // On click, toggle the state and inform the rest of the app
 typingToggleIcon.addEventListener('click', () => {
-  typingActive = !typingActive;
-  updateTypingIcon();
-  ipcRenderer.send('typing-app-typing-mode-changed', typingActive);
+    typingActive = !typingActive;
+    updateTypingIcon();
+    ipcRenderer.send('typing-app-typing-mode-changed', typingActive);
 });
 
 // Initialize the icon on load
@@ -46,5 +53,5 @@ updateTypingIcon();
 // -------------------------------------------------------
 const recordingIndicator = document.getElementById('recordingIndicator');
 recordingIndicator.addEventListener('click', () => {
-  ipcRenderer.send('global-toggle-recording');
+    ipcRenderer.send('global-toggle-recording');
 });

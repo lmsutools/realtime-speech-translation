@@ -30,6 +30,7 @@ function createMainWindow() {
     const mainDefaults = { width: 781, height: 435 }; // Set default sizes here
     const initialMainSizes = { width: 781, height: 435 }; // Initial sizes for first launch
     const restoredState = restoreWindowState(store, 'mainWindowState', mainDefaults, initialMainSizes); // Pass initialSizes
+
     mainWindow = new BrowserWindow({
         x: restoredState.x,
         y: restoredState.y,
@@ -50,13 +51,11 @@ function createMainWindow() {
         console.log('Main Window Bounds on ready-to-show (useContentSize: false):', mainWindow.getBounds());
         const display = screen.getDisplayNearestPoint({ x: mainWindow.getBounds().x, y: mainWindow.getBounds().y });
         console.log('Display scaleFactor for Main Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-
         // Delay and auto-resize logic
         setTimeout(() => {
             const currentBounds = mainWindow.getBounds();
             const restoredWidth = restoredState.width;
             const restoredHeight = restoredState.height;
-
             if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
                 console.log(`[Auto-Resize] Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
                 mainWindow.setBounds({ width: restoredWidth, height: restoredHeight });
@@ -65,7 +64,6 @@ function createMainWindow() {
             }
         }, 200);
     });
-
 
     mainWindow.loadFile('index.html');
     saveWindowState(store, 'mainWindowState', mainWindow);
@@ -87,6 +85,7 @@ function createSettingsWindow() {
     const settingsDefaults = { width: 270, height: 325 }; // Set default sizes here
     const initialSettingsSizes = { width: 270, height: 325 }; // Initial sizes for first launch
     const restoredState = restoreWindowState(store, 'settingsWindowState', settingsDefaults, initialSettingsSizes); // Pass initialSizes
+
     settingsWindow = new BrowserWindow({
         x: restoredState.x,
         y: restoredState.y,
@@ -106,13 +105,11 @@ function createSettingsWindow() {
         console.log('Settings Window Bounds on ready-to-show (useContentSize: false):', settingsWindow.getBounds());
         const display = screen.getDisplayNearestPoint({ x: settingsWindow.getBounds().x, y: settingsWindow.getBounds().y });
         console.log('Display scaleFactor for Settings Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-
         // Delay and auto-resize logic (similar to mainWindow)
         setTimeout(() => {
             const currentBounds = settingsWindow.getBounds();
             const restoredWidth = restoredState.width;
             const restoredHeight = restoredState.height;
-
             if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
                 console.log(`[Auto-Resize] Settings: Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
                 settingsWindow.setBounds({ width: restoredWidth, height: restoredHeight });
@@ -121,7 +118,6 @@ function createSettingsWindow() {
             }
         }, 200);
     });
-
 
     settingsWindow.loadFile('modules/settings/settings.html');
     settingsWindow.on('closed', () => {
@@ -133,6 +129,7 @@ function createSettingsWindow() {
 function createTypingAppWindow() {
     const typingDefaults = { width: 400, height: 200 };
     const restoredState = restoreWindowState(store, 'typingAppWindowState', typingDefaults);
+
     typingAppWindow = new BrowserWindow({
         x: restoredState.x,
         y: restoredState.y,
@@ -156,13 +153,11 @@ function createTypingAppWindow() {
         console.log('Typing App Window Bounds on ready-to-show (useContentSize: false):', typingAppWindow.getBounds());
         const display = screen.getDisplayNearestPoint({ x: typingAppWindow.getBounds().x, y: typingAppWindow.getBounds().y });
         console.log('Display scaleFactor for Typing App Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-
         // Delay and auto-resize logic (similar to mainWindow)
         setTimeout(() => {
             const currentBounds = typingAppWindow.getBounds();
             const restoredWidth = restoredState.width;
             const restoredHeight = restoredState.height;
-
             if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
                 console.log(`[Auto-Resize] Typing App: Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
                 typingAppWindow.setBounds({ width: restoredWidth, height: restoredHeight });
@@ -171,7 +166,6 @@ function createTypingAppWindow() {
             }
         }, 200);
     });
-
 
     typingAppWindow.loadFile('modules/typing/typing-app.html');
     typingAppWindow.on('closed', () => {
@@ -184,23 +178,17 @@ function createTypingAppWindow() {
     saveWindowState(store, 'typingAppWindowState', typingAppWindow);
 }
 
-
 function createTray() {
     if (process.platform === 'win32') {
         tray = new Tray(iconPath);
         const contextMenu = Menu.buildFromTemplate([
             {
                 label: 'Show App',
-                click: () => {
-                    if (mainWindow) mainWindow.show();
-                }
+                click: () => { if (mainWindow) mainWindow.show(); }
             },
             {
                 label: 'Quit',
-                click: () => {
-                    app.isQuiting = true;
-                    app.quit();
-                }
+                click: () => { app.isQuiting = true; app.quit(); }
             }
         ]);
         tray.setToolTip(appTitle);
@@ -210,7 +198,6 @@ function createTray() {
         });
     }
 }
-
 
 app.whenReady().then(async () => {
     const StoreModule = await import('electron-store');
@@ -230,6 +217,7 @@ app.whenReady().then(async () => {
             targetLanguage: 'en',
         }
     });
+
     currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
     registerGlobalShortcut(currentGlobalShortcut);
     createMainWindow();
@@ -248,7 +236,6 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
 });
-
 
 ipcMain.handle('paste-text', async (event, text) => {
     try {
@@ -275,6 +262,7 @@ ipcMain.on('model-setting-changed', (event, selectedModel) => {
         mainWindow.webContents.send('update-source-languages', selectedModel);
     }
 });
+
 ipcMain.on('open-typing-app', () => {
     createTypingAppWindow();
 });
@@ -284,12 +272,14 @@ ipcMain.on('typing-app-transcript-updated', (event, fullText) => {
         typingAppWindow.webContents.send('typing-app-update-text', fullText);
     }
 });
+
 ipcMain.on('typing-app-recording-state-changed', (event, recording) => {
     isRecording = recording;
     if (typingAppWindow && !typingAppWindow.isDestroyed()) {
         typingAppWindow.webContents.send('typing-app-recording-state', isRecording);
     }
 });
+
 ipcMain.on('typing-app-typing-mode-changed', (event, typingActive) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('typing-app-typing-mode-changed', typingActive);
@@ -309,6 +299,12 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
     }
 });
 
+// NEW: Handle reset for typing app
+ipcMain.on('reset-typing-app', () => {
+    if (typingAppWindow && !typingAppWindow.isDestroyed()) {
+        typingAppWindow.webContents.send('reset-typing-app');
+    }
+});
 
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
     return store ? store.get(key, defaultValue) : defaultValue;
