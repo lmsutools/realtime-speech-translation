@@ -3,64 +3,34 @@ const { ipcRenderer } = require('electron');
 const stateMachine = {
     states: {
         Idle: { width: 90, height: 90, textVisible: false },
-        Active: { width: 400, height: 200, textVisible: true }
+        Active: { width: 450, height: 250, textVisible: true }
     },
     currentState: 'Idle',
     transitionTo(newState) {
         console.log(`[TypingApp] Transitioning to ${newState}`);
-        const config = this.states[newState];
-        this.currentState = newState;
         const container = document.querySelector('.container');
         container.classList.toggle('idle', newState === 'Idle');
         container.classList.toggle('active', newState === 'Active');
 
-        const controls = document.querySelector('.controls');
-        const textContainer = document.querySelector('.text-container');
+        const micContainer = document.querySelector('.mic-container');
         if (newState === 'Idle') {
-            if (controls && controls.parentNode) controls.parentNode.removeChild(controls);
-            if (textContainer && textContainer.parentNode) textContainer.parentNode.removeChild(textContainer);
-            const micContainer = document.querySelector('.mic-container');
             if (micContainer) {
                 micContainer.style.cursor = 'pointer';
                 micContainer.removeEventListener('click', handleMicClick);
                 micContainer.addEventListener('click', handleMicClick, { once: false });
                 console.log('[TypingApp] Mic click listener reattached in Idle state');
             }
+            ipcRenderer.send('typing-app-resize', { width: this.states.Idle.width, height: this.states.Idle.height });
         } else if (newState === 'Active') {
-            if (!document.querySelector('.controls')) {
-                const controlsDiv = document.createElement('div');
-                controlsDiv.className = 'controls';
-                controlsDiv.innerHTML = `
-                    <div class="left-controls">
-                        <img id="recordingIndicator" src="../../assets/icons/mic-off.png" alt="Recording Indicator">
-                        <img id="typingToggleIcon" src="../../assets/icons/typing-inactive.png" alt="Typing Toggle">
-                    </div>
-                    <img id="closeButton" src="../../assets/icons/close.png" alt="Close">
-                `;
-                container.insertBefore(controlsDiv, container.lastChild);
-                const textDiv = document.createElement('div');
-                textDiv.className = 'text-container';
-                textDiv.id = 'typingAppTextContainer';
-                textDiv.innerHTML = '<div id="typingAppText"></div>';
-                container.appendChild(textDiv);
-                document.getElementById('recordingIndicator').addEventListener('click', handleRecordingClick);
-                document.getElementById('typingToggleIcon').addEventListener('click', handleTypingToggle);
-                document.getElementById('closeButton').addEventListener('click', handleClose);
-            }
-        }
-        // Fetch custom sizes for Active state
-        if (newState === 'Active') {
             Promise.all([
-                ipcRenderer.invoke('store-get', 'typingAppActiveWidth', 400),
-                ipcRenderer.invoke('store-get', 'typingAppActiveHeight', 200)
+                ipcRenderer.invoke('store-get', 'typingAppActiveWidth', this.states.Active.width),
+                ipcRenderer.invoke('store-get', 'typingAppActiveHeight', this.states.Active.height)
             ]).then(([width, height]) => {
                 ipcRenderer.send('typing-app-resize', { width, height });
                 console.log(`[TypingApp] Resize sent: ${width}x${height}`);
             });
-        } else {
-            ipcRenderer.send('typing-app-resize', { width: config.width, height: config.height });
-            console.log(`[TypingApp] Resize sent: ${config.width}x${config.height}`);
         }
+        this.currentState = newState;
     }
 };
 
@@ -127,13 +97,6 @@ ipcRenderer.on('typing-app-recording-state', (event, isRecording) => {
     stateMachine.transitionTo(isRecording ? 'Active' : 'Idle');
 });
 
-document.querySelector('.container').addEventListener('click', (e) => {
-    if (stateMachine.currentState === 'Idle') {
-        console.log('[TypingApp] Container clicked in Idle state (fallback)');
-        ipcRenderer.send('global-toggle-recording');
-    }
-});
-
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[TypingApp] DOMContentLoaded, initializing');
     updateTypingIcon();
@@ -143,5 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
         micContainer.addEventListener('click', handleMicClick, { once: false });
         console.log('[TypingApp] Initial mic click listener attached');
     }
+    document.getElementById('recordingIndicator').addEventListener('click', handleRecordingClick);
+    document.getElementById('typingToggleIcon').addEventListener('click', handleTypingToggle);
+    document.getElementById('closeButton').addEventListener('click', handleClose);
     stateMachine.transitionTo('Idle');
 });
