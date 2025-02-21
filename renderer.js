@@ -4,18 +4,17 @@ import { ipcRenderer } from 'electron';
 
 async function validateDeepgramToken(apiKey) {
     if (!apiKey) {
-        return {status: "not_set", message: "Deepgram API key is not set. Please set it in settings."};
+        return { status: "not_set", message: "Deepgram API key is not set. Please set it in settings." };
     }
     try {
-        const response = await fetch("https://api.deepgram.com/v1/auth/token", {headers: { "Authorization": `Token ${apiKey}` }});
-        if (response.ok) {
-            return { status: "valid" };
-        } else {
-            const errorData = await response.json();
-            return {status: "invalid", message: `Deepgram API Key is invalid: ${errorData.err_msg || 'Unknown error'}`};
-        }
+        const response = await fetch("https://api.deepgram.com/v1/auth/token", {
+            headers: { "Authorization": `Token ${apiKey}` }
+        });
+        if (response.ok) { return { status: "valid" }; }
+        const errorData = await response.json();
+        return { status: "invalid", message: `Deepgram API Key is invalid: ${errorData.err_msg || 'Unknown error'}` };
     } catch (error) {
-        return {status: "invalid", message: `Error validating Deepgram API key: ${error.message}`};
+        return { status: "invalid", message: `Error validating Deepgram API key: ${error.message}` };
     }
 }
 
@@ -38,17 +37,15 @@ initializeUI();
 document.getElementById('start').addEventListener('click', startRecording);
 document.getElementById('stop').addEventListener('click', stopRecording);
 document.getElementById('reset').addEventListener('click', () => {
-    resetRecordingData(); // Clear internal recording data
+    resetRecordingData();
     document.getElementById('source-text').textContent = 'Reset complete';
     document.getElementById('translated-text').textContent = '';
-    ipcRenderer.send('reset-typing-app'); // Sync typing app reset
-    setTimeout(() => {
-        document.getElementById('source-text').textContent = '';
-    }, 2000); // Clear feedback after 2 seconds
+    ipcRenderer.send('reset-typing-app');
+    setTimeout(() => { document.getElementById('source-text').textContent = ''; }, 2000);
 });
 
 document.getElementById('typingAppButton').addEventListener('click', () => {
-    console.log('Typing App button clicked');
+    console.log('[Renderer] Typing App button clicked');
     document.getElementById('pasteOption').value = 'source';
     ipcRenderer.send('open-typing-app');
 });
@@ -58,9 +55,7 @@ document.getElementById('settingsIcon').addEventListener('click', () => {
 });
 
 ipcRenderer.on('update-translation-ui', (event, enableTranslation) => {
-    import('./modules/ui.js').then(ui => {
-        ui.updateTranslationUI(enableTranslation);
-    });
+    import('./modules/ui.js').then(ui => { ui.updateTranslationUI(enableTranslation); });
 });
 
 ipcRenderer.on('update-source-languages', (event, selectedModel) => {
@@ -73,9 +68,12 @@ ipcRenderer.on('deepgram-validation-result', (event, result) => {
 
 ipcRenderer.on('global-toggle-recording', () => {
     const stopBtn = document.getElementById('stop');
+    console.log(`[Renderer] Received global-toggle-recording, stopBtn display: ${stopBtn.style.display}`);
     if (stopBtn.style.display === 'block') {
+        console.log('[Renderer] Stopping recording');
         stopRecording();
     } else {
+        console.log('[Renderer] Starting recording');
         startRecording();
     }
 });
@@ -88,24 +86,19 @@ const mutationObserver = new MutationObserver(() => {
 mutationObserver.observe(sourceTextElement, { childList: true, subtree: true });
 
 ipcRenderer.on('typing-app-window-closed', () => {
-    console.log('Typing App closed -> stopping recording, if active');
+    console.log('[Renderer] Typing App closed -> stopping recording, if active');
     stopRecording();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
     updateDeepgramValidationStatus();
-    // Automatically restart transcription when source language selection changes.
     const sourceLanguageSelect = document.getElementById('sourceLanguage');
     if (sourceLanguageSelect) {
         sourceLanguageSelect.addEventListener('change', () => {
-            // Check if transcription is active.
             const stopBtn = document.getElementById('stop');
             if (stopBtn.style.display === 'block') {
                 stopRecording();
-                // Restart after a brief delay to ensure the previous connection is fully closed.
-                setTimeout(() => {
-                    startRecording();
-                }, 1000);
+                setTimeout(() => { startRecording(); }, 1000);
             }
         });
     }

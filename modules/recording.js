@@ -11,10 +11,8 @@ let translations = [];
 let deepgramCaptions = [];
 let finalTranscription = "";
 let autoStopTimerId = null;
-// NEW: local boolean controlling if we actually do any pasting
 let typingActive = false;
 
-// Listen for changes from the typing app toggle
 ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
     typingActive = isActive;
 });
@@ -35,106 +33,81 @@ export async function startRecording() {
         const defaultAiProvider = aiProviders.find(provider => provider.id === defaultAiProviderId);
         const defaultAiModel = await getStoreValue('translateDefaultAiModel', defaultAiProvider.defaultModel);
 
-        if (!selectedLanguage) {
-            console.error("No source language selected.");
+        if (!deepgramKey) {
+            console.error('[Recording] No Deepgram API key set');
+            document.getElementById('source-text').textContent = 'Please set a Deepgram API key in settings.';
+            ipcRenderer.send('typing-app-recording-state-changed', false);
             return;
-        }
-        if (!targetLanguage) {
-            console.error("No target language selected.");
-            return;
-        }
-
-        if (selectedDeviceId && !(await isInputDeviceAvailable(selectedDeviceId))) {
-            console.warn(`Previously selected input device (${selectedDeviceId}) is not available.`);
-            await setStoreValue('defaultInputDevice', '');
-            document.getElementById('source-text').textContent = 'Previously selected input device is not available. Using default device.';
         }
 
         let stream;
-        if (selectedDeviceId) {
+        if (selectedDeviceId && await isInputDeviceAvailable(selectedDeviceId)) {
             stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedDeviceId } });
         } else {
-            console.warn("Using default input device.");
+            console.warn('[Recording] Using default input device');
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             document.getElementById('source-text').textContent = 'Using default input device.';
         }
 
+        console.log('[Recording] Audio stream obtained');
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
-        if (diarizationEnabled) {
-            queryParams += `&diarize=true`;
-        }
+        if (diarizationEnabled) { queryParams += `&diarize=true`; }
         socket = new WebSocket(`wss://api.deepgram.com/v1/listen${queryParams}`, ['token', deepgramKey]);
 
         socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            document.getElementById('source-text').textContent = "Deepgram connection failed. Please check your API key and network.";
-            document.getElementById('start').style.display = 'block';
-            document.getElementById('stop').style.display = 'none';
+            console.error('[Recording] WebSocket error:', error);
+            document.getElementById('source-text').textContent = "Deepgram connection failed.";
+            ipcRenderer.send('typing-app-recording-state-changed', false);
         };
 
         socket.onmessage = async (msg) => {
             const parsed = JSON.parse(msg.data || '{}');
             const transcript = parsed?.channel?.alternatives[0]?.transcript;
             if (transcript) {
-                console.log(transcript);
+                console.log('[Recording] Transcript:', transcript);
                 deepgramCaptions.push(parsed);
-                console.log("Deepgram captions array:", deepgramCaptions);
                 if (parsed.is_final) {
                     finalTranscription += " " + transcript;
                     document.getElementById('source-text').textContent = finalTranscription;
                     transcriptions.push(transcript);
-                    if (transcriptions.length > 10) {
-                        transcriptions.shift();
-                    }
+                    if (transcriptions.length > 10) { transcriptions.shift(); }
                 } else {
                     document.getElementById('source-text').textContent = finalTranscription + " " + transcript;
                 }
-                // Only paste if toggle is active (typingActive)
                 const pasteOption = document.getElementById('pasteOption').value;
                 if (typingActive && parsed.is_final) {
-                    if (pasteOption === 'source') {
-                        pasteText(transcript);
-                    }
-                    if (pasteOption === 'translated') {
-                        if (translationEnabled) {
-                            const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
-                            translations.push(translation);
-                            if (translations.length > 10) {
-                                translations.shift();
-                            }
-                            document.getElementById('translated-text').textContent += ` ${translation}`;
-                            pasteText(translation);
-                        }
+                    if (pasteOption === 'source') { pasteText(transcript); }
+                    if (pasteOption === 'translated' && translationEnabled) {
+                        const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
+                        translations.push(translation);
+                        if (translations.length > 10) { translations.shift(); }
+                        document.getElementById('translated-text').textContent += ` ${translation}`;
+                        pasteText(translation);
                     }
                 } else if (!typingActive && parsed.is_final && translationEnabled && pasteOption === 'translated') {
-                    // Even if toggle is off, we still do the translation in text, but skip the paste
                     const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
                     translations.push(translation);
-                    if (translations.length > 10) {
-                        translations.shift();
-                    }
+                    if (translations.length > 10) { translations.shift(); }
                     document.getElementById('translated-text').textContent += ` ${translation}`;
                 }
             }
         };
 
         socket.onclose = () => {
-            console.log('WebSocket connection closed');
+            console.log('[Recording] WebSocket connection closed');
         };
 
         socket.onopen = async () => {
+            console.log('[Recording] WebSocket opened');
             document.getElementById('source-text').textContent = '';
             mediaRecorder.start(50);
             ipcRenderer.send('typing-app-recording-state-changed', true);
-            console.log('MediaRecorder started');
-            console.log("Using AI Provider on Start:", defaultAiProvider.name);
-            console.log("Using AI Model on Start:", defaultAiModel);
+            console.log('[Recording] Recording started');
             const autoStopTimer = await getStoreValue('autoStopTimer', 60);
             autoStopTimerId = setTimeout(() => {
                 stopRecording();
-                const stopMsg = "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED, CHECK SETTINGS---";
-                document.getElementById('source-text').textContent += stopMsg;
+                document.getElementById('source-text').textContent += "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED---";
             }, autoStopTimer * 60000);
         };
 
@@ -147,33 +120,30 @@ export async function startRecording() {
         document.getElementById('start').style.display = 'none';
         document.getElementById('stop').style.display = 'block';
     } catch (error) {
-        console.error('Error starting recording:', error);
+        console.error('[Recording] Error starting recording:', error);
+        document.getElementById('source-text').textContent = 'Recording failed: ' + error.message;
+        ipcRenderer.send('typing-app-recording-state-changed', false);
+        document.getElementById('start').style.display = 'block';
+        document.getElementById('stop').style.display = 'none';
     }
 }
 
 export function stopRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
-        console.log('Recording stopped');
+        console.log('[Recording] Recording stopped');
     }
-    if (socket) {
-        socket.close();
-        socket = null;
-    }
+    if (socket) { socket.close(); socket = null; }
     ipcRenderer.send('typing-app-recording-state-changed', false);
-    if (autoStopTimerId) {
-        clearTimeout(autoStopTimerId);
-        autoStopTimerId = null;
-    }
+    if (autoStopTimerId) { clearTimeout(autoStopTimerId); autoStopTimerId = null; }
     document.getElementById('start').style.display = 'block';
     document.getElementById('stop').style.display = 'none';
 }
 
-// NEW: Reset accumulated data without stopping recording
 export function resetRecordingData() {
     transcriptions = [];
     translations = [];
     deepgramCaptions = [];
     finalTranscription = "";
-    console.log('Recording data reset');
+    console.log('[Recording] Recording data reset');
 }

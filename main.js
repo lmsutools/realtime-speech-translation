@@ -8,9 +8,8 @@ let settingsWindow;
 let typingAppWindow = null;
 let isRecording = false;
 let currentGlobalShortcut = 'CommandOrControl+Shift+T';
-let store; // electron-store instance
+let store;
 let tray = null;
-
 app.isQuiting = false;
 
 const iconPath = path.join(__dirname, 'assets', 'icons', 'talking.png');
@@ -27,10 +26,9 @@ function registerGlobalShortcut(shortcut) {
 }
 
 function createMainWindow() {
-    const mainDefaults = { width: 781, height: 435 }; // Set default sizes here
-    const initialMainSizes = { width: 781, height: 435 }; // Initial sizes for first launch
-    const restoredState = restoreWindowState(store, 'mainWindowState', mainDefaults, initialMainSizes); // Pass initialSizes
-
+    const mainDefaults = { width: 781, height: 435 };
+    const initialMainSizes = { width: 781, height: 435 };
+    const restoredState = restoreWindowState(store, 'mainWindowState', mainDefaults, initialMainSizes);
     mainWindow = new BrowserWindow({
         x: restoredState.x,
         y: restoredState.y,
@@ -39,35 +37,19 @@ function createMainWindow() {
         useContentSize: false,
         title: appTitle,
         icon: iconPath,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            enableRemoteModule: true,
-        },
+        webPreferences: { nodeIntegration: true, contextIsolation: false, enableRemoteModule: true },
         autoHideMenuBar: true,
     });
-
     mainWindow.on('ready-to-show', () => {
-        console.log('Main Window Bounds on ready-to-show (useContentSize: false):', mainWindow.getBounds());
-        const display = screen.getDisplayNearestPoint({ x: mainWindow.getBounds().x, y: mainWindow.getBounds().y });
-        console.log('Display scaleFactor for Main Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-        // Delay and auto-resize logic
         setTimeout(() => {
             const currentBounds = mainWindow.getBounds();
-            const restoredWidth = restoredState.width;
-            const restoredHeight = restoredState.height;
-            if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
-                console.log(`[Auto-Resize] Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
-                mainWindow.setBounds({ width: restoredWidth, height: restoredHeight });
-            } else {
-                console.log(`[Auto-Resize] Current size is acceptable, no resize needed.`);
+            if (currentBounds.width < restoredState.width * 0.8 || currentBounds.height < restoredState.height * 0.8) {
+                mainWindow.setBounds({ width: restoredState.width, height: restoredState.height });
             }
         }, 200);
     });
-
     mainWindow.loadFile('index.html');
     saveWindowState(store, 'mainWindowState', mainWindow);
-
     mainWindow.on('close', (e) => {
         if (process.platform === 'win32' && !app.isQuiting) {
             e.preventDefault();
@@ -75,17 +57,13 @@ function createMainWindow() {
         }
         return false;
     });
-
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
+    mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 function createSettingsWindow() {
-    const settingsDefaults = { width: 270, height: 325 }; // Set default sizes here
-    const initialSettingsSizes = { width: 270, height: 325 }; // Initial sizes for first launch
-    const restoredState = restoreWindowState(store, 'settingsWindowState', settingsDefaults, initialSettingsSizes); // Pass initialSizes
-
+    const settingsDefaults = { width: 270, height: 325 };
+    const initialSettingsSizes = { width: 270, height: 325 };
+    const restoredState = restoreWindowState(store, 'settingsWindowState', settingsDefaults, initialSettingsSizes);
     settingsWindow = new BrowserWindow({
         x: restoredState.x,
         y: restoredState.y,
@@ -94,47 +72,60 @@ function createSettingsWindow() {
         useContentSize: false,
         title: appTitle,
         icon: iconPath,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-        },
+        webPreferences: { nodeIntegration: true, contextIsolation: false },
         autoHideMenuBar: true,
     });
-
     settingsWindow.on('ready-to-show', () => {
-        console.log('Settings Window Bounds on ready-to-show (useContentSize: false):', settingsWindow.getBounds());
-        const display = screen.getDisplayNearestPoint({ x: settingsWindow.getBounds().x, y: settingsWindow.getBounds().y });
-        console.log('Display scaleFactor for Settings Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-        // Delay and auto-resize logic (similar to mainWindow)
         setTimeout(() => {
             const currentBounds = settingsWindow.getBounds();
-            const restoredWidth = restoredState.width;
-            const restoredHeight = restoredState.height;
-            if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
-                console.log(`[Auto-Resize] Settings: Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
-                settingsWindow.setBounds({ width: restoredWidth, height: restoredHeight });
-            } else {
-                console.log(`[Auto-Resize] Settings: Current size is acceptable, no resize needed.`);
+            if (currentBounds.width < restoredState.width * 0.8 || currentBounds.height < restoredState.height * 0.8) {
+                settingsWindow.setBounds({ width: restoredState.width, height: restoredState.height });
             }
         }, 200);
     });
-
     settingsWindow.loadFile('modules/settings/settings.html');
-    settingsWindow.on('closed', () => {
-        settingsWindow = null;
-    });
+    settingsWindow.on('closed', () => { settingsWindow = null; });
     saveWindowState(store, 'settingsWindowState', settingsWindow);
 }
 
-function createTypingAppWindow() {
-    const typingDefaults = { width: 400, height: 200 };
-    const restoredState = restoreWindowState(store, 'typingAppWindowState', typingDefaults);
+function ensureVisibleOnScreen(bounds) {
+    const displays = screen.getAllDisplays();
+    let isVisible = false;
+    for (const display of displays) {
+        const workArea = display.workArea;
+        const intersects = bounds.x < workArea.x + workArea.width &&
+                          bounds.x + bounds.width > workArea.x &&
+                          bounds.y < workArea.y + workArea.height &&
+                          bounds.y + bounds.height > workArea.y;
+        if (intersects) { isVisible = true; break; }
+    }
+    if (!isVisible) {
+        const primary = screen.getPrimaryDisplay().workArea;
+        return {
+            x: primary.x + Math.round((primary.width - bounds.width) / 2),
+            y: primary.y + Math.round((primary.height - bounds.height) / 2),
+            width: bounds.width,
+            height: bounds.height
+        };
+    }
+    return bounds;
+}
 
-    typingAppWindow = new BrowserWindow({
+async function createTypingAppWindow() {
+    const idleDefaults = { width: 90, height: 90 };
+    const activeDefaults = { width: 400, height: 200 };
+    const restoredState = restoreWindowState(store, 'typingAppWindowState', idleDefaults);
+    const initialBounds = ensureVisibleOnScreen({
         x: restoredState.x,
         y: restoredState.y,
-        width: restoredState.width,
-        height: restoredState.height,
+        width: isRecording ? activeDefaults.width : restoredState.width || idleDefaults.width,
+        height: isRecording ? activeDefaults.height : restoredState.height || idleDefaults.height
+    });
+    typingAppWindow = new BrowserWindow({
+        x: initialBounds.x,
+        y: initialBounds.y,
+        width: initialBounds.width,
+        height: initialBounds.height,
         useContentSize: false,
         title: appTitle,
         icon: iconPath,
@@ -142,31 +133,13 @@ function createTypingAppWindow() {
         frame: false,
         transparent: true,
         hasShadow: true,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-        },
+        webPreferences: { nodeIntegration: true, contextIsolation: false },
         autoHideMenuBar: true,
     });
-
     typingAppWindow.on('ready-to-show', () => {
-        console.log('Typing App Window Bounds on ready-to-show (useContentSize: false):', typingAppWindow.getBounds());
-        const display = screen.getDisplayNearestPoint({ x: typingAppWindow.getBounds().x, y: typingAppWindow.getBounds().y });
-        console.log('Display scaleFactor for Typing App Window (useContentSize: false):', display ? display.scaleFactor : 'Unknown');
-        // Delay and auto-resize logic (similar to mainWindow)
-        setTimeout(() => {
-            const currentBounds = typingAppWindow.getBounds();
-            const restoredWidth = restoredState.width;
-            const restoredHeight = restoredState.height;
-            if (currentBounds.width < restoredWidth * 0.8 || currentBounds.height < restoredHeight * 0.8) {
-                console.log(`[Auto-Resize] Typing App: Current size is significantly smaller, resizing to restored dimensions: { width: ${restoredWidth}, height: ${restoredHeight} }`);
-                typingAppWindow.setBounds({ width: restoredWidth, height: restoredHeight });
-            } else {
-                console.log(`[Auto-Resize] Typing App: Current size is acceptable, no resize needed.`);
-            }
-        }, 200);
+        typingAppWindow.webContents.send('typing-app-recording-state', isRecording);
+        console.log('[Main] Typing App window ready, sent initial recording state:', isRecording);
     });
-
     typingAppWindow.loadFile('modules/typing/typing-app.html');
     typingAppWindow.on('closed', () => {
         typingAppWindow = null;
@@ -182,20 +155,12 @@ function createTray() {
     if (process.platform === 'win32') {
         tray = new Tray(iconPath);
         const contextMenu = Menu.buildFromTemplate([
-            {
-                label: 'Show App',
-                click: () => { if (mainWindow) mainWindow.show(); }
-            },
-            {
-                label: 'Quit',
-                click: () => { app.isQuiting = true; app.quit(); }
-            }
+            { label: 'Show App', click: () => { if (mainWindow) mainWindow.show(); } },
+            { label: 'Quit', click: () => { app.isQuiting = true; app.quit(); } }
         ]);
         tray.setToolTip(appTitle);
         tray.setContextMenu(contextMenu);
-        tray.on('click', () => {
-            if (mainWindow) mainWindow.show();
-        });
+        tray.on('click', () => { if (mainWindow) mainWindow.show(); });
     }
 }
 
@@ -215,17 +180,15 @@ app.whenReady().then(async () => {
             aiProviders: '[]',
             typingAppGlobalShortcut: 'CommandOrControl+Shift+T',
             targetLanguage: 'en',
+            typingAppActiveWidth: 400,
+            typingAppActiveHeight: 200
         }
     });
-
     currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
     registerGlobalShortcut(currentGlobalShortcut);
     createMainWindow();
     createTray();
-
-    if (process.platform === 'darwin') {
-        app.dock.setIcon(iconPath);
-    }
+    if (process.platform === 'darwin') { app.dock.setIcon(iconPath); }
 });
 
 app.on('window-all-closed', () => {
@@ -247,9 +210,7 @@ ipcMain.handle('paste-text', async (event, text) => {
     }
 });
 
-ipcMain.on('open-settings', () => {
-    createSettingsWindow();
-});
+ipcMain.on('open-settings', () => { createSettingsWindow(); });
 
 ipcMain.on('translation-setting-changed', (event, enableTranslation) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -263,9 +224,7 @@ ipcMain.on('model-setting-changed', (event, selectedModel) => {
     }
 });
 
-ipcMain.on('open-typing-app', () => {
-    createTypingAppWindow();
-});
+ipcMain.on('open-typing-app', () => { createTypingAppWindow(); });
 
 ipcMain.on('typing-app-transcript-updated', (event, fullText) => {
     if (typingAppWindow && !typingAppWindow.isDestroyed()) {
@@ -274,6 +233,7 @@ ipcMain.on('typing-app-transcript-updated', (event, fullText) => {
 });
 
 ipcMain.on('typing-app-recording-state-changed', (event, recording) => {
+    console.log(`[Main] Recording state changed: ${recording}`);
     isRecording = recording;
     if (typingAppWindow && !typingAppWindow.isDestroyed()) {
         typingAppWindow.webContents.send('typing-app-recording-state', isRecording);
@@ -287,23 +247,23 @@ ipcMain.on('typing-app-typing-mode-changed', (event, typingActive) => {
 });
 
 ipcMain.on('global-toggle-recording', () => {
+    console.log('[Main] Received global-toggle-recording');
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('global-toggle-recording');
+        console.log('[Main] Forwarded global-toggle-recording to mainWindow');
+    }
+});
+
+ipcMain.on('typing-app-resize', (event, { width, height }) => {
+    if (typingAppWindow && !typingAppWindow.isDestroyed()) {
+        console.log(`[Main] Resizing Typing App to: ${width}x${height}`);
+        typingAppWindow.setSize(width, height);
     }
 });
 
 ipcMain.on('update-global-shortcut', (event, newShortcut) => {
     registerGlobalShortcut(newShortcut);
-    if (store) {
-        store.set('typingAppGlobalShortcut', newShortcut);
-    }
-});
-
-// NEW: Handle reset for typing app
-ipcMain.on('reset-typing-app', () => {
-    if (typingAppWindow && !typingAppWindow.isDestroyed()) {
-        typingAppWindow.webContents.send('reset-typing-app');
-    }
+    if (store) { store.set('typingAppGlobalShortcut', newShortcut); }
 });
 
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
@@ -311,17 +271,11 @@ ipcMain.handle('store-get', async (event, key, defaultValue) => {
 });
 
 ipcMain.handle('store-set', async (event, key, value) => {
-    if (store) {
-        store.set(key, value);
-        return true;
-    }
+    if (store) { store.set(key, value); return true; }
     return false;
 });
 
 ipcMain.handle('store-delete', async (event, key) => {
-    if (store) {
-        store.delete(key);
-        return true;
-    }
+    if (store) { store.delete(key); return true; }
     return false;
 });
