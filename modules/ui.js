@@ -14,12 +14,7 @@ export function updateTranslationUI(enableTranslation) {
 export function updateLanguageOptions(languageSelect, model) {
   languageSelect.innerHTML = '';
   const options = (model === 'nova-2')
-    ? [
-        { value: 'en-US', text: 'English' },
-        { value: 'es-ES', text: 'Spanish' },
-        { value: 'zh', text: 'Chinese Mandarin Simplified' },
-        { value: 'multi', text: 'Multi, English + Spanish' }
-      ]
+    ? [{ value: 'en-US', text: 'English' }, { value: 'es-ES', text: 'Spanish' }, { value: 'zh', text: 'Chinese Mandarin Simplified' }, { value: 'multi', text: 'Multi, English + Spanish' }]
     : [{ value: 'en', text: 'English' }];
   options.forEach(opt => {
     const optionElement = document.createElement('option');
@@ -55,8 +50,7 @@ export async function applySettingsToUI() {
   const targetLanguage = appState.targetLanguage;
 
   // Update Source Language Dropdown with combined options.
-  const sourceLanguageSelect = document.getElementById('sourceLanguage');
-  updateSourceLanguageDropdown();
+  await updateSourceLanguageDropdown();
 
   // Update Target Language Dropdown.
   const targetLanguageSelect = document.getElementById('targetLanguage');
@@ -75,6 +69,7 @@ export async function applySettingsToUI() {
   targetLanguageSelect.value = targetLanguage;
 
   // Attach event listeners to update the MobX store when changed.
+  const sourceLanguageSelect = document.getElementById('sourceLanguage');
   sourceLanguageSelect.addEventListener('change', (e) => {
     appState.setSourceLanguage(e.target.value);
   });

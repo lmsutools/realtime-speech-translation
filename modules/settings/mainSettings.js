@@ -1,8 +1,5 @@
-import { populateInputDevices } from '../devices.js';
 import { ipcRenderer } from 'electron';
 import { appState } from '../../stores/appState.js';
-import { loadProviderSettings, saveProviderSettings, initializeProviderSettingsUI } from './providerSettings.js';
-import { initializeSettingsUI } from './uiSettings.js';
 
 function debounce(func, wait) {
   let timeout;
@@ -35,19 +32,36 @@ export async function loadSettings() {
   const enableTranslationSettingsCheckbox = document.getElementById('enableTranslationSettings');
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
-
   const defaultInputDevice = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
-  populateInputDevices('inputDeviceSettings').then(() => {
-    if (defaultInputDevice) inputDeviceSettingsSelect.value = defaultInputDevice;
+
+  // Populate input devices
+  try {
+    await import('../devices.js').then(module => module.populateInputDevices('inputDeviceSettings')).then(() => {
+      if (defaultInputDevice) inputDeviceSettingsSelect.value = defaultInputDevice;
+    });
+  } catch (error) {
+    console.error('Error populating input devices:', error);
+  }
+
+  // Load values from store via IPC
+  const enableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+  const diarizationEnabled = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
+  const deepgramApiKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
+  const autoStopTimer = await ipcRenderer.invoke('store-get', 'autoStopTimer', 60);
+
+  console.log('[Settings] Loaded deepgramApiKey:', deepgramApiKey); // Debug log
+
+  // Update appState and UI
+  const { runInAction } = require("mobx");
+  runInAction(() => {
+    appState.setEnableTranslation(enableTranslation);
+    appState.setDiarizationEnabled(diarizationEnabled);
+    appState.setDeepgramApiKey(deepgramApiKey);
   });
-
-  // Use MobX store values for settings
-  diarizationSettingsCheckbox.checked = appState.diarizationEnabled;
-  enableTranslationSettingsCheckbox.checked = appState.enableTranslation;
-  deepgramApiKeyInput.value = appState.deepgramApiKey;
-  autoStopTimerInput.value = await ipcRenderer.invoke('store-get', 'autoStopTimer', 60);
-
-  loadProviderSettings();
+  diarizationSettingsCheckbox.checked = diarizationEnabled;
+  enableTranslationSettingsCheckbox.checked = enableTranslation;
+  deepgramApiKeyInput.value = deepgramApiKey;
+  autoStopTimerInput.value = autoStopTimer;
 }
 
 export async function saveSettings() {
@@ -61,19 +75,28 @@ export async function saveSettings() {
     ipcRenderer.invoke('store-set', 'defaultInputDevice', inputDeviceSettingsSelect.value);
   }
   if (diarizationSettingsCheckbox) {
-    appState.setDiarizationEnabled(diarizationSettingsCheckbox.checked);
+    const value = diarizationSettingsCheckbox.checked;
+    appState.setDiarizationEnabled(value);
+    ipcRenderer.invoke('store-set', 'diarizationEnabled', value);
   }
   if (enableTranslationSettingsCheckbox) {
-    appState.setEnableTranslation(enableTranslationSettingsCheckbox.checked);
-    ipcRenderer.send('translation-setting-changed', enableTranslationSettingsCheckbox.checked);
+    const value = enableTranslationSettingsCheckbox.checked;
+    appState.setEnableTranslation(value);
+    ipcRenderer.invoke('store-set', 'enableTranslation', value);
+    ipcRenderer.send('translation-setting-changed', value);
   }
   if (deepgramApiKeyInput) {
-    appState.setDeepgramApiKey(deepgramApiKeyInput.value);
+    const value = deepgramApiKeyInput.value;
+    appState.setDeepgramApiKey(value);
+    ipcRenderer.invoke('store-set', 'deepgramApiKey', value);
+    console.log('[Settings] Saving deepgramApiKey:', value); // Debug log
   }
   if (autoStopTimerInput) {
     ipcRenderer.invoke('store-set', 'autoStopTimer', autoStopTimerInput.value);
   }
-  saveProviderSettings();
+
+  await import('./providerSettings.js').then(module => module.saveProviderSettings());
+
   const apiKey = deepgramApiKeyInput.value;
   const result = await validateDeepgramToken(apiKey);
   ipcRenderer.send('deepgram-validation-result', result);
@@ -86,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
 
-  initializeSettingsUI();
+  await import('./uiSettings.js').then(module => module.initializeSettingsUI());
 
   if (inputDeviceSettingsSelect) inputDeviceSettingsSelect.addEventListener('change', saveSettings);
   if (diarizationSettingsCheckbox) diarizationSettingsCheckbox.addEventListener('change', saveSettings);
@@ -96,7 +119,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     deepgramApiKeyInput.addEventListener('input', debouncedSaveSettings);
   }
   if (autoStopTimerInput) autoStopTimerInput.addEventListener('change', saveSettings);
-  initializeProviderSettingsUI();
+
+  await import('./providerSettings.js').then(module => module.initializeProviderSettingsUI());
   await loadSettings();
 });
 

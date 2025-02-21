@@ -21,8 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="setting-group">
       <label for="typingAppActiveHeight">Active Height (px):</label>
       <input type="number" id="typingAppActiveHeight" min="100" max="600" value="200">
-    </div>
-  `;
+    </div>`;
+
   const shortcutInput = document.getElementById('typingAppShortcut');
   const hint = document.getElementById('typingAppShortcutHint');
   const widthInput = document.getElementById('typingAppActiveWidth');
@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     isCapturing = true;
     hint.style.display = 'block';
     shortcutInput.value = '';
+    // Temporarily unregister the global shortcut so key events reach this window
+    ipcRenderer.send('unregister-global-shortcut');
     document.addEventListener('keydown', handleKeydown);
   }
 
@@ -71,6 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       stopCapture();
       shortcutInput.value = lastValidShortcut;
+      // Re-register the previous shortcut on cancel
+      ipcRenderer.send('update-global-shortcut', lastValidShortcut);
       return;
     }
     const combo = buildShortcutString(e);
@@ -87,11 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
     shortcutInput.focus();
     startCapture();
   });
-
-  widthInput.addEventListener('change', () => {
-    appState.setTypingAppActiveWidth(parseInt(widthInput.value));
-  });
-  heightInput.addEventListener('change', () => {
-    appState.setTypingAppActiveHeight(parseInt(heightInput.value));
-  });
+  widthInput.addEventListener('change', () => { appState.setTypingAppActiveWidth(parseInt(widthInput.value)); });
+  heightInput.addEventListener('change', () => { appState.setTypingAppActiveHeight(parseInt(heightInput.value)); });
 });
