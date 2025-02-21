@@ -1,3 +1,4 @@
+import { appState } from '../stores/appState.js';
 import { getStoreValue, setStoreValue } from './storeBridge.js';
 
 export function updateTranslationUI(enableTranslation) {
@@ -44,17 +45,19 @@ export async function updateSourceLanguageDropdown() {
     optionElement.text = opt.text;
     sourceLanguageSelect.appendChild(optionElement);
   });
-  const storedValue = await getStoreValue('sourceLanguage', 'nova-2|multi');
-  sourceLanguageSelect.value = storedValue;
+  // Set the dropdown value from the MobX store
+  sourceLanguageSelect.value = appState.sourceLanguage;
 }
 
 export async function applySettingsToUI() {
-  const enableTranslation = (await getStoreValue('enableTranslation', false)) === true;
-  const storedSourceLanguage = await getStoreValue('sourceLanguage', 'nova-2|multi');
-  const targetLanguage = await getStoreValue('targetLanguage', 'en');
+  // Use MobX store values
+  const enableTranslation = appState.enableTranslation;
+  const targetLanguage = appState.targetLanguage;
+
   // Update Source Language Dropdown with combined options.
   const sourceLanguageSelect = document.getElementById('sourceLanguage');
   updateSourceLanguageDropdown();
+
   // Update Target Language Dropdown.
   const targetLanguageSelect = document.getElementById('targetLanguage');
   targetLanguageSelect.innerHTML = '';
@@ -70,14 +73,16 @@ export async function applySettingsToUI() {
     targetLanguageSelect.appendChild(optionElement);
   });
   targetLanguageSelect.value = targetLanguage;
-  await setStoreValue('targetLanguage', targetLanguage);
+
+  // Attach event listeners to update the MobX store when changed.
+  sourceLanguageSelect.addEventListener('change', (e) => {
+    appState.setSourceLanguage(e.target.value);
+  });
+  targetLanguageSelect.addEventListener('change', (e) => {
+    appState.setTargetLanguage(e.target.value);
+  });
+
   updateTranslationUI(enableTranslation);
-  sourceLanguageSelect.addEventListener('change', async (e) => {
-    await setStoreValue('sourceLanguage', e.target.value);
-  });
-  targetLanguageSelect.addEventListener('change', async (e) => {
-    await setStoreValue('targetLanguage', e.target.value);
-  });
 }
 
 export function initializeUI() {

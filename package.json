@@ -15,7 +15,9 @@
     "@electron/remote": "^2.1.2",
     "@nut-tree-fork/nut-js": "^4.2.4",
     "electron": "^32.1.2",
-    "electron-store": "^10.0.1"
+    "electron-store": "^10.0.1",
+    "mobx": "^6.13.6",
+    "mobx-react": "^9.2.0"
   },
   "devDependencies": {
     "webpack": "^5.97.1",
