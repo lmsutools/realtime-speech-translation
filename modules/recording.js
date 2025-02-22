@@ -1,12 +1,10 @@
 /**
  * @fileoverview
- * Advanced ephemeral dictionary approach to handle partial re-labeling from Deepgram.
- * We keep an ephemeralWords Map keyed by (start, end), so if partial reassigns a word's
- * speaker or removes the word, we update or delete accordingly.
- *
- * At final results, ephemeralWords get moved to final paragraphs. This ensures:
- *  - Updated speaker labels reflect the latest partial changes.
- *  - No stale words remain in ephemeral once Deepgram removes or corrects them.
+ * - Advanced ephemeral dictionary approach for partial re-labeling from Deepgram.
+ * - Color-coded speaker labels, minimal repeated speaker labeling.
+ * - Partial vs. Full reset logic. If user hits Reset while recording, we do a
+ *   partial reset (clear paragraphs, keep WebSocket active). If not recording, 
+ *   do a full reset as usual.
  */
 
 import { translateWithAI } from './translation.js';
@@ -16,43 +14,59 @@ import { appState } from '../stores/appState.js';
 import { ipcRenderer } from 'electron';
 import { runInAction } from 'mobx';
 
-// ======= GLOBALS =======
+// ====================== GLOBALS ======================
 let mediaRecorder;
 let socket;
 
-// Keep track of all final text in paragraph form
-let finalParagraphs = [];
-// ephemeralWords: A dictionary (Map) of in-progress words from partial updates
-//   keyed by "start-end", each value = { start, end, speaker, text, confidence, language }
-let ephemeralWords = new Map();
-
-let deepgramCaptions = []; // store all Deepgram responses
-let transcriptions = [];
-let translations = [];
+let deepgramCaptions = [];       // store all raw Deepgram responses
+let transcriptions = [];         // store final transcripts so far (for context)
+let translations = [];           // store final translations so far
 let finalTranscription = "";
 
-// For paragraph splitting logic
-const TIME_GAP_THRESHOLD = 3.0;   // seconds
-const MAX_SENTENCES_PER_PARAGRAPH = 3;
+// finalParagraphs: array of { speaker, text, endTime, sentenceCount }
+let finalParagraphs = [];
+
+// ephemeralWords: Map keyed by "start-end" => { start, end, speaker, text, confidence, language }
+let ephemeralWords = new Map();
 
 let autoStopTimerId = null;
 let typingActive = false;
+
+// For paragraph splitting logic
+const TIME_GAP_THRESHOLD = 3.0;           // seconds
+const MAX_SENTENCES_PER_PARAGRAPH = 3;
+
+// Predefined speaker label colors (for up to 10 speakers)
+const speakerPillColors = [
+  "#e91e63", // pink
+  "#9c27b0", // purple
+  "#673ab7", // deep purple
+  "#3f51b5", // indigo
+  "#2196f3", // blue
+  "#03a9f4", // light blue
+  "#00bcd4", // cyan
+  "#009688", // teal
+  "#4caf50", // green
+  "#8bc34a"  // light green
+];
 
 ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
   typingActive = isActive;
 });
 
 /**
- * Begins recording and sets up the Deepgram WebSocket.
+ * Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram,
+ * and begins streaming audio data. If diarization is enabled, we do ephemeral
+ * dictionary approach with color-coded labels; else, fallback to old approach.
  */
 export async function startRecording() {
   socket = null;
   try {
+    // Force-read diarization from store
     const diarizationEnabledFromStore = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
     runInAction(() => {
       appState.setDiarizationEnabled(diarizationEnabledFromStore);
     });
-
     const diarizationEnabled = appState.diarizationEnabled;
     console.log('[Recording] diarizationEnabled:', diarizationEnabled);
 
@@ -72,7 +86,7 @@ export async function startRecording() {
       return;
     }
 
-    // Acquire audio
+    // Acquire audio from user’s microphone
     const selectedDeviceId = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
     let stream;
     if (selectedDeviceId && await isInputDeviceAvailable(selectedDeviceId)) {
@@ -82,10 +96,9 @@ export async function startRecording() {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       document.getElementById('source-text').textContent = 'Using default input device.';
     }
-
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
-    // Build WebSocket URL
+    // Build Deepgram WebSocket URL
     let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
     if (diarizationEnabled) {
       queryParams += '&diarize=true';
@@ -100,6 +113,7 @@ export async function startRecording() {
       ipcRenderer.send('typing-app-recording-state-changed', false);
     };
 
+    // On open, start capturing
     socket.onopen = async () => {
       console.log('[Recording] WebSocket opened');
       document.getElementById('source-text').textContent = '';
@@ -114,11 +128,12 @@ export async function startRecording() {
       }, autoStopTimer * 60000);
     };
 
-    // On each WebSocket message from Deepgram
-    socket.onmessage = async (msg) => {
-      const parsed = JSON.parse(msg.data || '{}');
+    // On each message from Deepgram
+    socket.onmessage = async (event) => {
+      const parsed = JSON.parse(event.data || '{}');
       deepgramCaptions.push(parsed);
 
+      // If diarization is off, fallback approach:
       if (!appState.diarizationEnabled) {
         handleNoDiarization(parsed);
         return;
@@ -126,47 +141,52 @@ export async function startRecording() {
 
       const alt = parsed?.channel?.alternatives[0];
       if (!alt) return;
-
       const words = alt.words || [];
       const plainTranscript = alt.transcript || "";
 
-      // 1) Synchronize ephemeralWords with the new partial chunk
+      // 1) Sync ephemeralWords with this partial chunk
       syncEphemeralWords(ephemeralWords, words);
 
-      // 2) If partial => build ephemeral paragraphs + final paragraphs => display
-      //    If final => move ephemeral words to final paragraphs, then display
+      // 2) If partial => build ephemeral paragraphs + final => display
       if (!parsed.is_final) {
         const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
-        const displayText = buildDisplayTranscript(finalParagraphs, ephemeralParagraphs);
-        document.getElementById('source-text').textContent = displayText;
-      } else {
-        // final => convert ephemeralWords into final paragraphs
+        const html = buildHTMLTranscript(finalParagraphs, ephemeralParagraphs);
+        // Show with color-coded pills
+        document.getElementById('source-text').innerHTML = html;
+      }
+      // 3) If final => move ephemeral paragraphs => final, clear ephemeral
+      else {
         const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
         finalParagraphs.push(...ephemeralParagraphs);
         ephemeralWords.clear(); // done with ephemeral
-        // Rebuild finalTranscription
-        finalTranscription = buildDisplayTranscript(finalParagraphs, []);
-        document.getElementById('source-text').textContent = finalTranscription;
 
+        // Build final transcript
+        finalTranscription = buildHTMLTranscript(finalParagraphs, []);
+        document.getElementById('source-text').innerHTML = finalTranscription;
+
+        // For context & translation
         transcriptions.push(plainTranscript);
         if (transcriptions.length > 10) transcriptions.shift();
         await handleTranslationAndPasting(plainTranscript, true);
 
-        // OPTIONAL: log all responses so far
+        // Log all responses so far
         console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
       }
     };
 
+    // On close
     socket.onclose = () => {
       console.log('[Recording] WebSocket connection closed');
     };
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
-        socket.send(event.data);
+    // MediaRecorder -> send data to socket
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
+        socket.send(e.data);
       }
     };
 
+    // Adjust UI
     document.getElementById('start').style.display = 'none';
     document.getElementById('stop').style.display = 'block';
   } catch (error) {
@@ -179,7 +199,7 @@ export async function startRecording() {
 }
 
 /**
- * Stops recording and closes the Deepgram WebSocket.
+ * Stop the recording and close the socket
  */
 export function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -201,23 +221,33 @@ export function stopRecording() {
 }
 
 /**
- * Resets all data in preparation for a new recording session.
+ * Called by the "Reset" button in your UI. 
+ * If recording is active, do a "partial reset" so transcription continues.
+ * If not recording, do a "full reset."
  */
-export function resetRecordingData() {
-  mediaRecorder = null;
-  socket = null;
-  transcriptions = [];
-  translations = [];
-  deepgramCaptions = [];
-  finalTranscription = "";
-  finalParagraphs = [];
-  ephemeralWords.clear();
-  console.log('[Recording] Recording data reset');
+export function onResetClicked() {
+  // Check if we are currently recording
+  const isRecordingActive = !!(mediaRecorder && mediaRecorder.state !== 'inactive' && socket);
+
+  if (isRecordingActive) {
+    // PARTIAL RESET
+    finalParagraphs = [];
+    ephemeralWords.clear();
+    finalTranscription = "";
+    deepgramCaptions = [];
+    transcriptions = [];
+    translations = [];
+    document.getElementById('source-text').textContent = "";
+    document.getElementById('translated-text').textContent = "";
+    console.log('[Recording] Partial reset done. Recording continues...');
+  } else {
+    // FULL RESET
+    resetRecordingData(); // see function below
+  }
 }
 
 /**
- * Fallback approach if diarization is disabled.
- * @param {object} parsed - Deepgram response JSON
+ * If diarization is disabled, fallback approach
  */
 function handleNoDiarization(parsed) {
   const alt = parsed?.channel?.alternatives[0];
@@ -239,105 +269,104 @@ function handleNoDiarization(parsed) {
 }
 
 /**
- * Synchronizes ephemeralWords with the latest partial update from Deepgram.
- * - We compute a newPartialMap from the current chunk's words.
- * - If ephemeralWords contains a word that is NOT in newPartialMap, remove it (Deepgram removed it).
- * - If ephemeralWords is missing a word from newPartialMap, add it.
- * - If ephemeralWords has the same word but speaker changed, update it.
- *
- * @param {Map<string,object>} ephemeralWords - The global ephemeral dictionary
- * @param {Array<object>} words - The current chunk's word list from Deepgram
+ * The "full" reset for everything. This is used if not currently recording.
+ * It clears all transcript data, but DOES NOT kill the mediaRecorder or socket 
+ * (because we might be disconnected already).
  */
-function syncEphemeralWords(ephemeralWords, words) {
-  // Build newPartialMap: key => {start, end, speaker, text, ...}
-  const newPartialMap = new Map();
+export function resetRecordingData() {
+  transcriptions = [];
+  translations = [];
+  deepgramCaptions = [];
+  finalTranscription = "";
+  finalParagraphs = [];
+  ephemeralWords.clear();
+
+  document.getElementById('source-text').textContent = "";
+  document.getElementById('translated-text').textContent = "";
+
+  console.log('[Recording] Full recording data reset');
+}
+
+/**
+ * Compare ephemeralWords with the new chunk of words from Deepgram,
+ * updating or removing items as needed so we reflect the latest partial updates.
+ */
+function syncEphemeralWords(ephemeralMap, words) {
+  // 1) Build new partial map
+  const newMap = new Map();
   for (const w of words) {
     const key = makeWordKey(w.start, w.end);
-    newPartialMap.set(key, {
+    newMap.set(key, {
       start: w.start,
       end: w.end,
       speaker: w.speaker,
-      text: w.word,          // or w.punctuated_word if you prefer
+      text: w.word,  // or w.punctuated_word
       confidence: w.confidence,
       language: w.language
     });
   }
 
-  // Remove from ephemeralWords any keys not in newPartialMap
-  for (const oldKey of ephemeralWords.keys()) {
-    if (!newPartialMap.has(oldKey)) {
-      ephemeralWords.delete(oldKey);
+  // 2) Remove ephemeral words not in new partial
+  for (const oldKey of ephemeralMap.keys()) {
+    if (!newMap.has(oldKey)) {
+      ephemeralMap.delete(oldKey);
     }
   }
 
-  // Add or update ephemeralWords from newPartialMap
-  for (const [k, wordObj] of newPartialMap) {
-    if (!ephemeralWords.has(k)) {
-      // brand new
-      ephemeralWords.set(k, wordObj);
+  // 3) Add or update ephemeral words
+  for (const [key, val] of newMap) {
+    if (!ephemeralMap.has(key)) {
+      ephemeralMap.set(key, val);
     } else {
-      // possibly speaker changed or text changed
-      const existing = ephemeralWords.get(k);
-      // if anything changed, update
-      if (existing.speaker !== wordObj.speaker || existing.text !== wordObj.text) {
-        ephemeralWords.set(k, wordObj);
+      const existing = ephemeralMap.get(key);
+      if (existing.speaker !== val.speaker || existing.text !== val.text) {
+        ephemeralMap.set(key, val);
       }
     }
   }
 }
 
 /**
- * Creates a unique string key from start/end times. Round to 2 decimals to reduce floating issues.
- * @param {number} start
- * @param {number} end
- * @returns {string} e.g. "3.44-4.08"
+ * Make a unique key for each ephemeral word, e.g. "3.44-4.08"
  */
 function makeWordKey(start, end) {
-  const s = start.toFixed(2);
-  const e = end.toFixed(2);
-  return `${s}-${e}`;
+  return `${start.toFixed(2)}-${end.toFixed(2)}`;
 }
 
 /**
- * Builds paragraphs from an array of ephemeral word objects,
- * using speaker changes, time gaps >= 3s, or >=3 sentence enders to split paragraphs.
- *
- * @param {Array} wordObjects - ephemeral or final word objects: {start, end, speaker, text}
- * @returns {Array} paragraphs, each of shape { speaker, text, endTime, sentenceCount }
+ * Convert ephemeral or final word objects into paragraphs, splitting if:
+ *  - time gap >= 3s
+ *  - speaker changes
+ *  - paragraph has >= 3 sentence enders
  */
-function buildParagraphsFromWords(wordObjects) {
-  if (!wordObjects.length) return [];
+function buildParagraphsFromWords(words) {
+  if (!words.length) return [];
 
   // Sort by start time
-  wordObjects.sort((a, b) => a.start - b.start);
+  words.sort((a, b) => a.start - b.start);
 
   let paragraphs = [];
   let currentPara = null;
 
-  for (const w of wordObjects) {
+  for (const w of words) {
     if (!currentPara) {
       currentPara = createParagraph(w);
       continue;
     }
-    const timeGap = w.start - currentPara.endTime;
+    const gap = w.start - currentPara.endTime;
     const sameSpeaker = (w.speaker === currentPara.speaker);
-    const newSentenceCount = currentPara.sentenceCount + countSentenceEnders(w.text);
+    const newSentCount = currentPara.sentenceCount + countSentenceEnders(w.text);
 
-    // If big gap, or speaker changed, or too many sentences => new paragraph
-    if (timeGap >= TIME_GAP_THRESHOLD || !sameSpeaker || newSentenceCount >= MAX_SENTENCES_PER_PARAGRAPH) {
-      // push old one
+    if (gap >= TIME_GAP_THRESHOLD || !sameSpeaker || newSentCount >= MAX_SENTENCES_PER_PARAGRAPH) {
+      // push old
       paragraphs.push(currentPara);
-      // start new
       currentPara = createParagraph(w);
     } else {
-      // append
       currentPara.text += " " + w.text;
       currentPara.endTime = w.end;
-      currentPara.sentenceCount = newSentenceCount;
+      currentPara.sentenceCount = newSentCount;
     }
   }
-
-  // push the last paragraph
   if (currentPara) {
     paragraphs.push(currentPara);
   }
@@ -345,9 +374,7 @@ function buildParagraphsFromWords(wordObjects) {
 }
 
 /**
- * Creates a fresh paragraph object from a single word object.
- * @param {object} w
- * @returns {object} paragraph
+ * Create a new paragraph from a single word
  */
 function createParagraph(w) {
   return {
@@ -359,37 +386,50 @@ function createParagraph(w) {
 }
 
 /**
- * Builds a user-visible transcript from final paragraphs + ephemeral paragraphs,
- * respecting minimal repeated speaker labels.
- *
- * @param {Array} finalParas
- * @param {Array} ephemeralParas
- * @returns {string}
+ * Build an HTML-based transcript from final + ephemeral paragraphs,
+ * color-coding speaker labels, skipping repeated labels if the same speaker 
+ * continues in the next paragraph.
  */
-function buildDisplayTranscript(finalParas, ephemeralParas) {
+function buildHTMLTranscript(finalParas, ephemeralParas) {
   const combined = [...finalParas, ...ephemeralParas];
   if (!combined.length) return "";
 
-  let lines = [];
+  let htmlParts = [];
   let lastSpeaker = null;
 
   for (const para of combined) {
-    if (para.speaker !== lastSpeaker) {
-      // label once
-      lines.push(`speaker ${para.speaker}: ${para.text.trim()}`);
-      lastSpeaker = para.speaker;
+    const spk = para.speaker;
+    const txt = para.text.trim();
+    if (spk !== lastSpeaker) {
+      // label + color pill
+      const color = getSpeakerColor(spk);
+      const pill = `<span style="
+        background-color: ${color};
+        color: #fff;
+        border-radius: 10px;
+        padding: 2px 6px;
+        margin-right: 6px;
+        font-weight: 500;
+      ">speaker ${spk}</span>`;
+      htmlParts.push(`<div>${pill}${txt}</div>`);
+      lastSpeaker = spk;
     } else {
-      // same speaker => new line, no label
-      lines.push(para.text.trim());
+      // same speaker => no label
+      htmlParts.push(`<div>${txt}</div>`);
     }
   }
-  return lines.join("\n");
+  return htmlParts.join("");
 }
 
 /**
- * Counts the approximate number of sentence enders (., ? or !) in a given text.
- * @param {string} text
- * @returns {number} how many enders found
+ * Return color for given speaker ID (0..n). We cycle through up to 10 colors.
+ */
+function getSpeakerColor(speakerId) {
+  return speakerPillColors[speakerId % speakerPillColors.length];
+}
+
+/**
+ * Count sentence enders in text. Basic approach: . ? !
  */
 function countSentenceEnders(text) {
   const matches = text.match(/[.!?]+/g);
@@ -397,14 +437,12 @@ function countSentenceEnders(text) {
 }
 
 /**
- * For final transcripts, handle translations/pasting based on user settings.
- * @param {string} transcript
- * @param {boolean} isFinal
+ * If final transcript, handle translation/pasting if user wants it.
  */
 async function handleTranslationAndPasting(transcript, isFinal) {
+  if (!isFinal) return;
   const pasteOption = document.getElementById('pasteOption').value;
   const translationEnabled = appState.enableTranslation;
-  if (!isFinal) return;
 
   if (typingActive) {
     if (pasteOption === 'source') {
