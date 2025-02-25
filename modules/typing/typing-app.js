@@ -1,5 +1,6 @@
 const { ipcRenderer } = require('electron');
-const { appState } = require('../../stores/appState.js'); // Import MobX store
+const { appState } = require('../../stores/appState.js');
+const { runInAction } = require("mobx");
 
 const stateMachine = {
   states: {
@@ -20,7 +21,10 @@ const stateMachine = {
         micContainer.addEventListener('click', handleMicClick, { once: false });
         console.log('[TypingApp] Mic click listener reattached in Idle state');
       }
-      ipcRenderer.send('typing-app-resize', { width: this.states.Idle.width, height: this.states.Idle.height });
+      ipcRenderer.send('typing-app-resize', {
+        width: this.states.Idle.width,
+        height: this.states.Idle.height
+      });
     } else if (newState === 'Active') {
       Promise.all([
         ipcRenderer.invoke('store-get', 'typingAppActiveWidth', this.states.Active.width),
@@ -70,8 +74,8 @@ function handleRecordingClick(e) {
 function handleTypingToggle(e) {
   e.stopPropagation();
   const newTypingActive = !appState.typingActive;
-  appState.setTypingActive(newTypingActive); // Update local state
-  ipcRenderer.send('typing-app-typing-mode-changed', newTypingActive); // Notify main & recording module
+  appState.setTypingActive(newTypingActive);
+  ipcRenderer.send('typing-app-typing-mode-changed', newTypingActive);
   updateTypingIcon();
 }
 
@@ -97,8 +101,12 @@ ipcRenderer.on('typing-app-recording-state', (event, isRecording) => {
   stateMachine.transitionTo(isRecording ? 'Active' : 'Idle');
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('[TypingApp] DOMContentLoaded, initializing');
+  // Load enableTranslation from store
+  const storedEnableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+  runInAction(() => { appState.setEnableTranslation(storedEnableTranslation); });
+  console.log(`[TypingApp] Initialized appState.enableTranslation to: ${storedEnableTranslation}`);
   // Initialize typingActive and other values from store via IPC
   Promise.all([
     ipcRenderer.invoke('store-get', 'typingActive', false),
@@ -110,13 +118,13 @@ document.addEventListener('DOMContentLoaded', () => {
     ipcRenderer.invoke('store-get', 'typingAppGlobalShortcut', 'CommandOrControl+Shift+T'),
     ipcRenderer.invoke('store-get', 'typingAppActiveWidth', 400),
     ipcRenderer.invoke('store-get', 'typingAppActiveHeight', 200)
-  ]).then(([typingActive, deepgramApiKey, enableTranslation, diarizationEnabled, sourceLanguage, targetLanguage, typingAppGlobalShortcut, typingAppActiveWidth, typingAppActiveHeight]) => {
-    console.log('[TypingApp] Loaded deepgramApiKey:', deepgramApiKey); // Debug log
+  ]).then(([typingActive, deepgramApiKey, enableTranslationAgain, diarizationEnabled, sourceLanguage, targetLanguage, typingAppGlobalShortcut, typingAppActiveWidth, typingAppActiveHeight]) => {
+    console.log('[TypingApp] Loaded deepgramApiKey:', deepgramApiKey);
     const { runInAction } = require("mobx");
     runInAction(() => {
       appState.setTypingActive(typingActive);
       appState.setDeepgramApiKey(deepgramApiKey);
-      appState.setEnableTranslation(enableTranslation);
+      appState.setEnableTranslation(enableTranslationAgain);
       appState.setDiarizationEnabled(diarizationEnabled);
       appState.setSourceLanguage(sourceLanguage);
       appState.setTargetLanguage(targetLanguage);
@@ -125,10 +133,8 @@ document.addEventListener('DOMContentLoaded', () => {
       appState.setTypingAppActiveHeight(typingAppActiveHeight);
     });
     updateTypingIcon();
-    // IMPORTANT: Re-sync the typing mode state so that the recording module is updated
     ipcRenderer.send('typing-app-typing-mode-changed', appState.typingActive);
   }).catch(error => console.error('Error loading initial state:', error));
-
   updateRecordingIndicator(false);
   const micContainer = document.querySelector('.mic-container');
   if (micContainer) {
@@ -139,4 +145,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('typingToggleIcon').addEventListener('click', handleTypingToggle);
   document.getElementById('closeButton').addEventListener('click', handleClose);
   stateMachine.transitionTo('Idle');
+});
+
+// Listen for updates to appState from main
+ipcRenderer.on('update-app-state', (event, data) => {
+  if (typeof data.enableTranslation !== 'undefined') {
+    runInAction(() => { appState.setEnableTranslation(data.enableTranslation); });
+    console.log(`[TypingApp] appState.enableTranslation updated: ${data.enableTranslation}`);
+  }
 });
