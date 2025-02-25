@@ -11,7 +11,8 @@ let socket;
 let deepgramCaptions = [];       // store all raw Deepgram responses
 let transcriptions = [];         // store final transcripts so far (for context)
 let translations = [];           // store final translations so far
-let finalTranscription = "";     // HTML transcript built from final paragraphs
+let finalTranscription = "";
+// finalParagraphs: array of { speaker, text, endTime, sentenceCount }
 let finalParagraphs = [];
 // ephemeralWords: Map keyed by "start-end" => { start, end, speaker, text, confidence, language }
 let ephemeralWords = new Map();
@@ -36,39 +37,9 @@ const speakerPillColors = [
   "#8bc34a"  // light green
 ];
 
-ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => { typingActive = isActive; });
-
-/*** Helper: Group consecutive paragraphs by speaker */
-function groupTranscript(paras) {
-  const groups = [];
-  let currentGroup = null;
-  for (const para of paras) {
-    if (!currentGroup || para.speaker !== currentGroup.speaker) {
-      currentGroup = { speaker: para.speaker, texts: [para.text.trim()] };
-      groups.push(currentGroup);
-    } else {
-      currentGroup.texts.push(para.text.trim());
-    }
-  }
-  return groups;
-}
-
-/*** Build an HTML-based transcript from final + ephemeral paragraphs.
- * Each speaker section is enclosed in a <div class="speaker-section">.
- * A top padding of 5px is applied for every new speaker section (except the first).
- */
-function buildHTMLTranscript(finalParas, ephemeralParas) {
-  const combined = [...finalParas, ...ephemeralParas];
-  if (!combined.length) return "";
-  const groups = groupTranscript(combined);
-  let htmlParts = groups.map((group, index) => {
-    const color = getSpeakerColor(group.speaker);
-    const pill = `<span style="background-color: ${color}; color: #fff; border-radius: 10px; padding: 2px 6px; margin-right: 6px; font-weight: 500;">speaker ${group.speaker}</span>`;
-    const style = index > 0 ? ' style="padding-top:5px;"' : "";
-    return `<div class="speaker-section"${style}>${pill} ${group.texts.join(" ")}</div>`;
-  });
-  return htmlParts.join("");
-}
+ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => { 
+  typingActive = isActive; 
+});
 
 /*** Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels. */
 function buildPlainTranscript(finalParas, ephemeralParas) {
@@ -77,8 +48,8 @@ function buildPlainTranscript(finalParas, ephemeralParas) {
 }
 
 /*** Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram,
- * and begins streaming audio data.
- */
+ * and begins streaming audio data. If diarization is enabled, we do ephemeral
+ * dictionary approach with color-coded labels; else, fallback to old approach. */
 export async function startRecording() {
   socket = null;
   try {
@@ -92,7 +63,9 @@ export async function startRecording() {
     let deepgramKey = appState.deepgramApiKey;
     if (!deepgramKey) {
       deepgramKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
-      if (deepgramKey) { runInAction(() => { appState.setDeepgramApiKey(deepgramKey); }); }
+      if (deepgramKey) {
+        runInAction(() => { appState.setDeepgramApiKey(deepgramKey); });
+      }
     }
     if (!deepgramKey) {
       console.error('[Recording] No Deepgram API key set');
@@ -162,7 +135,7 @@ export async function startRecording() {
       else {
         const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
         finalParagraphs.push(...ephemeralParagraphs);
-        ephemeralWords.clear();
+        ephemeralWords.clear(); // done with ephemeral
         finalTranscription = buildHTMLTranscript(finalParagraphs, []);
         document.getElementById('source-text').innerHTML = finalTranscription;
         const plainText = buildPlainTranscript(finalParagraphs, []);
@@ -171,13 +144,18 @@ export async function startRecording() {
         transcriptions.push(plainTranscript);
         if (transcriptions.length > 10) transcriptions.shift();
         await handleTranslationAndPasting(plainTranscript, true);
+        // Log all responses so far
         console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
       }
     };
     // On close
     socket.onclose = () => { console.log('[Recording] WebSocket connection closed'); };
     // MediaRecorder -> send data to socket
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) { socket.send(e.data); } };
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
+        socket.send(e.data);
+      }
+    };
     // Adjust UI
     document.getElementById('start').style.display = 'none';
     document.getElementById('stop').style.display = 'block';
@@ -196,20 +174,27 @@ export function stopRecording() {
     mediaRecorder.stop();
     console.log('[Recording] Recording stopped');
   }
-  if (socket) { socket.close(); socket = null; }
+  if (socket) {
+    socket.close();
+    socket = null;
+  }
   ipcRenderer.send('typing-app-recording-state-changed', false);
-  if (autoStopTimerId) { clearTimeout(autoStopTimerId); autoStopTimerId = null; }
+  if (autoStopTimerId) {
+    clearTimeout(autoStopTimerId);
+    autoStopTimerId = null;
+  }
   document.getElementById('start').style.display = 'block';
   document.getElementById('stop').style.display = 'none';
 }
 
 /*** Called by the "Reset" button in your UI.
  * If recording is active, do a "partial reset" so transcription continues.
- * If not recording, do a "full reset."
- */
+ * If not recording, do a "full reset." */
 export function onResetClicked() {
+  // Check if we are currently recording
   const isRecordingActive = !!(mediaRecorder && mediaRecorder.state !== 'inactive' && socket);
   if (isRecordingActive) {
+    // PARTIAL RESET
     finalParagraphs = [];
     ephemeralWords.clear();
     finalTranscription = "";
@@ -220,6 +205,7 @@ export function onResetClicked() {
     document.getElementById('translated-text').textContent = "";
     console.log('[Recording] Partial reset done. Recording continues...');
   } else {
+    // FULL RESET
     resetRecordingData();
   }
 }
@@ -242,8 +228,8 @@ function handleNoDiarization(parsed) {
 }
 
 /*** The "full" reset for everything. This is used if not currently recording.
- * It clears all transcript data, but DOES NOT kill the mediaRecorder or socket.
- */
+ * It clears all transcript data, but DOES NOT kill the mediaRecorder or socket
+ * (because we might be disconnected already). */
 export function resetRecordingData() {
   transcriptions = [];
   translations = [];
@@ -257,9 +243,9 @@ export function resetRecordingData() {
 }
 
 /*** Compare ephemeralWords with the new chunk of words from Deepgram,
- * updating or removing items as needed.
- */
+ * updating or removing items as needed so we reflect the latest partial updates. */
 function syncEphemeralWords(ephemeralMap, words) {
+  // 1) Build new partial map
   const newMap = new Map();
   for (const w of words) {
     const key = makeWordKey(w.start, w.end);
@@ -267,19 +253,26 @@ function syncEphemeralWords(ephemeralMap, words) {
       start: w.start,
       end: w.end,
       speaker: w.speaker,
-      text: w.word,
+      text: w.word,  // or w.punctuated_word
       confidence: w.confidence,
       language: w.language
     });
   }
+  // 2) Remove ephemeral words not in new partial
   for (const oldKey of ephemeralMap.keys()) {
-    if (!newMap.has(oldKey)) { ephemeralMap.delete(oldKey); }
+    if (!newMap.has(oldKey)) {
+      ephemeralMap.delete(oldKey);
+    }
   }
+  // 3) Add or update ephemeral words
   for (const [key, val] of newMap) {
-    if (!ephemeralMap.has(key)) { ephemeralMap.set(key, val); }
-    else {
+    if (!ephemeralMap.has(key)) {
+      ephemeralMap.set(key, val);
+    } else {
       const existing = ephemeralMap.get(key);
-      if (existing.speaker !== val.speaker || existing.text !== val.text) { ephemeralMap.set(key, val); }
+      if (existing.speaker !== val.speaker || existing.text !== val.text) {
+        ephemeralMap.set(key, val);
+      }
     }
   }
 }
@@ -292,15 +285,18 @@ function makeWordKey(start, end) {
 /*** Convert ephemeral or final word objects into paragraphs, splitting if:
  *  - time gap >= 3s
  *  - speaker changes
- *  - paragraph has >= 3 sentence enders
- */
+ *  - paragraph has >= 3 sentence enders */
 function buildParagraphsFromWords(words) {
   if (!words.length) return [];
+  // Sort by start time
   words.sort((a, b) => a.start - b.start);
   let paragraphs = [];
   let currentPara = null;
   for (const w of words) {
-    if (!currentPara) { currentPara = createParagraph(w); continue; }
+    if (!currentPara) {
+      currentPara = createParagraph(w);
+      continue;
+    }
     const gap = w.start - currentPara.endTime;
     const sameSpeaker = (w.speaker === currentPara.speaker);
     const newSentCount = currentPara.sentenceCount + countSentenceEnders(w.text);
@@ -313,7 +309,9 @@ function buildParagraphsFromWords(words) {
       currentPara.sentenceCount = newSentCount;
     }
   }
-  if (currentPara) { paragraphs.push(currentPara); }
+  if (currentPara) {
+    paragraphs.push(currentPara);
+  }
   return paragraphs;
 }
 
@@ -327,67 +325,83 @@ function createParagraph(w) {
   };
 }
 
-/*** Return color for given speaker ID (0..n). */
+/*** Build an HTML-based transcript from final + ephemeral paragraphs,
+ * color-coding speaker labels, skipping repeated labels if the same speaker
+ * continues in the next paragraph. */
+function buildHTMLTranscript(finalParas, ephemeralParas) {
+  const combined = [...finalParas, ...ephemeralParas];
+  if (!combined.length) return "";
+  let htmlParts = [];
+  let lastSpeaker = null;
+  for (const para of combined) {
+    const spk = para.speaker;
+    const txt = para.text.trim();
+    if (spk !== lastSpeaker) {
+      // label + color pill
+      const color = getSpeakerColor(spk);
+      const pill = `<span style="background-color: ${color};color: #fff;border-radius: 10px;padding: 2px 6px;margin-right: 6px;font-weight: 500;">speaker ${spk}</span>`;
+      htmlParts.push(`<div>${pill} ${txt}</div>`);
+      lastSpeaker = spk;
+    } else {
+      // same speaker => no label
+      htmlParts.push(`<div>${txt}</div>`);
+    }
+  }
+  return htmlParts.join("");
+}
+
+/*** Return color for given speaker ID (0..n). We cycle through up to 10 colors. */
 function getSpeakerColor(speakerId) {
   return speakerPillColors[speakerId % speakerPillColors.length];
 }
 
-/*** Count sentence enders in text. */
+/*** Count sentence enders in text. Basic approach: . ? ! */
 function countSentenceEnders(text) {
   const matches = text.match(/[.!?]+/g);
   return matches ? matches.length : 0;
 }
 
-/*** If final transcript, handle translation/pasting if translation is enabled.
- * When diarization is enabled, group the final paragraphs by speaker, translate each group,
- * and rebuild the translated transcript using speaker-section containers.
- * When diarization is off, the existing behavior is maintained.
- */
+/*** If final transcript, handle translation/pasting if user wants it. */
 async function handleTranslationAndPasting(transcript, isFinal) {
-  if (!transcript.trim()) return;
-  if (!isFinal) return;
-  let pasteOptionElement = document.getElementById('pasteOption');
-  let pasteOption = pasteOptionElement ? pasteOptionElement.value : 'translated';
+  if (!transcript.trim()) {
+    console.log('[Recording] Empty transcript, skipping');
+    return;
+  }
+  if (!isFinal) {
+    console.log('[Recording] Not a final transcript, skipping');
+    return;
+  }
+  const pasteOption = document.getElementById('pasteOption').value;
   const translationEnabled = appState.enableTranslation;
-  console.log(`[Recording] transcript="${transcript}", pasteOption=${pasteOption}, translationEnabled=${translationEnabled}`);
-  
-  if (translationEnabled) {
-    if (appState.diarizationEnabled) {
-      // Group final paragraphs by speaker
-      const groups = groupTranscript(finalParagraphs);
-      let translatedGroups = [];
-      for (let i = 0; i < groups.length; i++) {
-        let group = groups[i];
-        // Translate the entire group text at once
-        let translatedText = await translateWithAI(group.texts.join(" "), "", "");
-        let color = getSpeakerColor(group.speaker);
-        let pill = `<span style="background-color: ${color}; color: #fff; border-radius: 10px; padding: 2px 6px; margin-right: 6px; font-weight: 500;">speaker ${group.speaker}</span>`;
-        const style = i > 0 ? ' style="padding-top:5px;"' : "";
-        translatedGroups.push(`<div class="speaker-section"${style}>${pill} ${translatedText}</div>`);
-      }
-      const finalTranslatedHTML = translatedGroups.join("");
-      const translatedTextElem = document.getElementById('translated-text');
-      if (translatedTextElem) {
-        translatedTextElem.innerHTML = finalTranslatedHTML;
-      } else {
-        console.warn("[Recording] Element with id 'translated-text' not found.");
-      }
-      pasteText(translatedGroups.join(" "));
-    } else {
-      console.log("[Recording] Translation is enabled, calling translateWithAI regardless of pasteOption for debugging.");
+  console.log(`[Recording] Handling: transcript="${transcript}", pasteOption=${pasteOption}, translationEnabled=${translationEnabled}, typingActive=${typingActive}`);
+
+  if (typingActive) {
+    if (pasteOption === 'source') {
+      console.log(`[Recording] Pasting source text: "${transcript}"`);
+      await pasteText(transcript);
+    } else if (pasteOption === 'translated' && translationEnabled) {
+      console.log(`[Recording] Translating and pasting: "${transcript}"`);
       const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
-      console.log("[Recording] Received translation:", translation);
-      translations.push(translation);
-      if (translations.length > 10) translations.shift();
-      const translatedTextElem = document.getElementById('translated-text');
-      if (translatedTextElem) {
-        translatedTextElem.textContent += " " + translation;
+      document.getElementById('translated-text').textContent += " " + translation;
+      if (translation.startsWith("Translation Error:")) {
+        console.log(`[Recording] Translation failed: "${translation}", pasting original: "${transcript}"`);
+        await pasteText(transcript);
       } else {
-        console.warn("[Recording] Element with id 'translated-text' not found.");
+        console.log(`[Recording] Translation succeeded: "${translation}", pasting`);
+        translations.push(translation);
+        if (translations.length > 10) translations.shift();
+        await pasteText(translation);
       }
-      pasteText(translation);
     }
   } else {
-    console.log("[Recording] Translation is disabled; skipping translation.");
+    if (pasteOption === 'translated' && translationEnabled) {
+      console.log(`[Recording] Translating (no typing): "${transcript}"`);
+      const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
+      document.getElementById('translated-text').textContent += " " + translation;
+      if (!translation.startsWith("Translation Error:")) {
+        translations.push(translation);
+        if (translations.length > 10) translations.shift();
+      }
+    }
   }
 }
