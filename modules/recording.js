@@ -37,20 +37,15 @@ const speakerPillColors = [
     "#8bc34a"  // light green
 ];
 
-ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
-    typingActive = isActive;
-});
+ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => { typingActive = isActive; });
 
-/**
- * Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.
- */
+/*** Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.*/
 function buildPlainTranscript(finalParas, ephemeralParas) {
     const combined = [...finalParas, ...ephemeralParas];
     return combined.map(para => para.text.trim()).join(' ');
 }
 
-/**
- * Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram,
+/*** Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram,
  * and begins streaming audio data. If diarization is enabled, we do ephemeral
  * dictionary approach with color-coded labels; else, fallback to old approach.
  */
@@ -59,12 +54,9 @@ export async function startRecording() {
     try {
         // Force-read diarization from store
         const diarizationEnabledFromStore = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
-        runInAction(() => {
-            appState.setDiarizationEnabled(diarizationEnabledFromStore);
-        });
+        runInAction(() => { appState.setDiarizationEnabled(diarizationEnabledFromStore); });
         const diarizationEnabled = appState.diarizationEnabled;
         console.log('[Recording] diarizationEnabled:', diarizationEnabled);
-
         const combined = appState.sourceLanguage;
         const [selectedModel, selectedLanguage] = combined.split('|');
         let deepgramKey = appState.deepgramApiKey;
@@ -80,7 +72,6 @@ export async function startRecording() {
             ipcRenderer.send('typing-app-recording-state-changed', false);
             return;
         }
-
         // Acquire audio from user’s microphone
         const selectedDeviceId = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
         let stream;
@@ -92,22 +83,17 @@ export async function startRecording() {
             document.getElementById('source-text').textContent = 'Using default input device.';
         }
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-
         // Build Deepgram WebSocket URL
         let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
-        if (diarizationEnabled) {
-            queryParams += '&diarize=true';
-        }
+        if (diarizationEnabled) { queryParams += '&diarize=true'; }
         const wsUrl = `wss://api.deepgram.com/v1/listen${queryParams}`;
         console.log('[Recording] WebSocket URL:', wsUrl);
         socket = new WebSocket(wsUrl, ['token', deepgramKey]);
-
         socket.onerror = (error) => {
             console.error('[Recording] WebSocket error:', error);
             document.getElementById('source-text').textContent = "Deepgram connection failed.";
             ipcRenderer.send('typing-app-recording-state-changed', false);
         };
-
         // On open, start capturing
         socket.onopen = async () => {
             console.log('[Recording] WebSocket opened');
@@ -121,26 +107,21 @@ export async function startRecording() {
                 document.getElementById('source-text').textContent += "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED---";
             }, autoStopTimer * 60000);
         };
-
         // On each message from Deepgram
         socket.onmessage = async (event) => {
             const parsed = JSON.parse(event.data || '{}');
             deepgramCaptions.push(parsed);
-
             // If diarization is off, fallback approach:
             if (!appState.diarizationEnabled) {
                 handleNoDiarization(parsed);
                 return;
             }
-
             const alt = parsed?.channel?.alternatives[0];
             if (!alt) return;
             const words = alt.words || [];
             const plainTranscript = alt.transcript || "";
-
             // 1) Sync ephemeralWords with this partial chunk
             syncEphemeralWords(ephemeralWords, words);
-
             // 2) If partial => build ephemeral paragraphs + final => display
             if (!parsed.is_final) {
                 const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
@@ -158,29 +139,22 @@ export async function startRecording() {
                 document.getElementById('source-text').innerHTML = finalTranscription;
                 const plainText = buildPlainTranscript(finalParagraphs, []);
                 ipcRenderer.send('typing-app-transcript-updated', plainText);
-
                 // For context & translation
                 transcriptions.push(plainTranscript);
                 if (transcriptions.length > 10) transcriptions.shift();
                 await handleTranslationAndPasting(plainTranscript, true);
-
                 // Log all responses so far
                 console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
             }
         };
-
         // On close
-        socket.onclose = () => {
-            console.log('[Recording] WebSocket connection closed');
-        };
-
+        socket.onclose = () => { console.log('[Recording] WebSocket connection closed'); };
         // MediaRecorder -> send data to socket
         mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
                 socket.send(e.data);
             }
         };
-
         // Adjust UI
         document.getElementById('start').style.display = 'none';
         document.getElementById('stop').style.display = 'block';
@@ -193,9 +167,7 @@ export async function startRecording() {
     }
 }
 
-/**
- * Stop the recording and close the socket
- */
+/*** Stop the recording and close the socket*/
 export function stopRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
@@ -214,8 +186,7 @@ export function stopRecording() {
     document.getElementById('stop').style.display = 'none';
 }
 
-/**
- * Called by the "Reset" button in your UI.
+/*** Called by the "Reset" button in your UI.
  * If recording is active, do a "partial reset" so transcription continues.
  * If not recording, do a "full reset."
  */
@@ -239,29 +210,24 @@ export function onResetClicked() {
     }
 }
 
-/**
- * If diarization is disabled, fallback approach
- */
+/*** If diarization is disabled, fallback approach*/
 function handleNoDiarization(parsed) {
     const alt = parsed?.channel?.alternatives[0];
     if (!alt) return;
     const transcript = alt.transcript || "";
-    if (!transcript) return;
+    if (!transcript.trim()) return;
     if (parsed.is_final) {
         finalTranscription += " " + transcript;
         document.getElementById('source-text').textContent = finalTranscription;
         transcriptions.push(transcript);
-        if (transcriptions.length > 10) {
-            transcriptions.shift();
-        }
+        if (transcriptions.length > 10) { transcriptions.shift(); }
         handleTranslationAndPasting(transcript, true);
     } else {
         document.getElementById('source-text').textContent = finalTranscription + " " + transcript;
     }
 }
 
-/**
- * The "full" reset for everything. This is used if not currently recording.
+/*** The "full" reset for everything. This is used if not currently recording.
  * It clears all transcript data, but DOES NOT kill the mediaRecorder or socket
  * (because we might be disconnected already).
  */
@@ -277,8 +243,7 @@ export function resetRecordingData() {
     console.log('[Recording] Full recording data reset');
 }
 
-/**
- * Compare ephemeralWords with the new chunk of words from Deepgram,
+/*** Compare ephemeralWords with the new chunk of words from Deepgram,
  * updating or removing items as needed so we reflect the latest partial updates.
  */
 function syncEphemeralWords(ephemeralMap, words) {
@@ -314,15 +279,12 @@ function syncEphemeralWords(ephemeralMap, words) {
     }
 }
 
-/**
- * Make a unique key for each ephemeral word, e.g. "3.44-4.08"
- */
+/*** Make a unique key for each ephemeral word, e.g. "3.44-4.08"*/
 function makeWordKey(start, end) {
     return `${start.toFixed(2)}-${end.toFixed(2)}`;
 }
 
-/**
- * Convert ephemeral or final word objects into paragraphs, splitting if:
+/*** Convert ephemeral or final word objects into paragraphs, splitting if:
  *  - time gap >= 3s
  *  - speaker changes
  *  - paragraph has >= 3 sentence enders
@@ -342,7 +304,6 @@ function buildParagraphsFromWords(words) {
         const sameSpeaker = (w.speaker === currentPara.speaker);
         const newSentCount = currentPara.sentenceCount + countSentenceEnders(w.text);
         if (gap >= TIME_GAP_THRESHOLD || !sameSpeaker || newSentCount >= MAX_SENTENCES_PER_PARAGRAPH) {
-            // push old
             paragraphs.push(currentPara);
             currentPara = createParagraph(w);
         } else {
@@ -357,9 +318,7 @@ function buildParagraphsFromWords(words) {
     return paragraphs;
 }
 
-/**
- * Create a new paragraph from a single word
- */
+/*** Create a new paragraph from a single word*/
 function createParagraph(w) {
     return {
         speaker: w.speaker,
@@ -369,8 +328,7 @@ function createParagraph(w) {
     };
 }
 
-/**
- * Build an HTML-based transcript from final + ephemeral paragraphs,
+/*** Build an HTML-based transcript from final + ephemeral paragraphs,
  * color-coding speaker labels, skipping repeated labels if the same speaker
  * continues in the next paragraph.
  */
@@ -396,25 +354,20 @@ function buildHTMLTranscript(finalParas, ephemeralParas) {
     return htmlParts.join("");
 }
 
-/**
- * Return color for given speaker ID (0..n). We cycle through up to 10 colors.
- */
+/*** Return color for given speaker ID (0..n). We cycle through up to 10 colors.*/
 function getSpeakerColor(speakerId) {
     return speakerPillColors[speakerId % speakerPillColors.length];
 }
 
-/**
- * Count sentence enders in text. Basic approach: . ? !
- */
+/*** Count sentence enders in text. Basic approach: . ? !*/
 function countSentenceEnders(text) {
     const matches = text.match(/[.!?]+/g);
     return matches ? matches.length : 0;
 }
 
-/**
- * If final transcript, handle translation/pasting if user wants it.
- */
+/*** If final transcript, handle translation/pasting if user wants it.*/
 async function handleTranslationAndPasting(transcript, isFinal) {
+    if (!transcript.trim()) return;
     if (!isFinal) return;
     const pasteOption = document.getElementById('pasteOption').value;
     const translationEnabled = appState.enableTranslation;
