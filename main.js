@@ -4,6 +4,7 @@ const { simulatePaste } = require('./modules/typing/typing.js');
 const { restoreWindowState, saveWindowState } = require('./modules/windowState.js');
 const { appState } = require('./stores/appState.js'); // Import MobX store
 const { runInAction } = require("mobx");
+
 // Ensure this is at the top
 let settingsWindow;
 let typingAppWindow = null;
@@ -43,7 +44,7 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: true
+      enableRemoteModule: true,
     },
     autoHideMenuBar: true,
   });
@@ -51,17 +52,13 @@ function createMainWindow() {
   mainWindow.on('ready-to-show', () => {
     setTimeout(() => {
       const currentBounds = mainWindow.getBounds();
-      if (
-        currentBounds.width < restoredState.width * 0.8 ||
-        currentBounds.height < restoredState.height * 0.8
-      ) {
+      if (currentBounds.width < restoredState.width * 0.8 || currentBounds.height < restoredState.height * 0.8) {
         mainWindow.setBounds({ width: restoredState.width, height: restoredState.height });
       }
     }, 200);
   });
 
   mainWindow.loadFile('index.html');
-
   saveWindowState(store, 'mainWindowState', mainWindow);
 
   mainWindow.on('close', (e) => {
@@ -98,7 +95,7 @@ function createSettingsWindow() {
     icon: iconPath,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
     },
     autoHideMenuBar: true,
   });
@@ -106,28 +103,22 @@ function createSettingsWindow() {
   settingsWindow.on('ready-to-show', () => {
     setTimeout(() => {
       const currentBounds = settingsWindow.getBounds();
-      if (
-        currentBounds.width < restoredState.width * 0.8 ||
-        currentBounds.height < restoredState.height * 0.8
-      ) {
+      if (currentBounds.width < restoredState.width * 0.8 || currentBounds.height < restoredState.height * 0.8) {
         settingsWindow.setBounds({ width: restoredState.width, height: restoredState.height });
       }
     }, 200);
   });
 
   settingsWindow.loadFile('modules/settings/settings.html');
-
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
-
   saveWindowState(store, 'settingsWindowState', settingsWindow);
 }
 
 function ensureVisibleOnScreen(bounds) {
   const displays = screen.getAllDisplays();
   let isVisible = false;
-
   for (const display of displays) {
     const workArea = display.workArea;
     const intersects =
@@ -140,17 +131,15 @@ function ensureVisibleOnScreen(bounds) {
       break;
     }
   }
-
   if (!isVisible) {
     const primary = screen.getPrimaryDisplay().workArea;
     return {
       x: primary.x + Math.round((primary.width - bounds.width) / 2),
       y: primary.y + Math.round((primary.height - bounds.height) / 2),
       width: bounds.width,
-      height: bounds.height
+      height: bounds.height,
     };
   }
-
   return bounds;
 }
 
@@ -168,7 +157,7 @@ async function createTypingAppWindow() {
     x: restoredState.x,
     y: restoredState.y,
     width: isRecording ? activeDefaults.width : restoredState.width || idleDefaults.width,
-    height: isRecording ? activeDefaults.height : restoredState.height || idleDefaults.height
+    height: isRecording ? activeDefaults.height : restoredState.height || idleDefaults.height,
   });
 
   typingAppWindow = new BrowserWindow({
@@ -185,7 +174,7 @@ async function createTypingAppWindow() {
     hasShadow: true,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
     },
     autoHideMenuBar: true,
   });
@@ -196,7 +185,6 @@ async function createTypingAppWindow() {
   });
 
   typingAppWindow.loadFile('modules/typing/typing-app.html');
-
   typingAppWindow.on('closed', () => {
     typingAppWindow = null;
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -204,7 +192,6 @@ async function createTypingAppWindow() {
       mainWindow.webContents.send('typing-app-window-closed');
     }
   });
-
   saveWindowState(store, 'typingAppWindowState', typingAppWindow);
 }
 
@@ -216,20 +203,18 @@ function createTray() {
         label: 'Show App',
         click: () => {
           if (mainWindow) mainWindow.show();
-        }
+        },
       },
       {
         label: 'Quit',
         click: () => {
           app.isQuiting = true;
           app.quit();
-        }
-      }
+        },
+      },
     ]);
-
     tray.setToolTip(appTitle);
     tray.setContextMenu(contextMenu);
-
     tray.on('click', () => {
       if (mainWindow) mainWindow.show();
     });
@@ -254,8 +239,8 @@ app.whenReady().then(async () => {
       targetLanguage: 'en',
       typingAppActiveWidth: 400,
       typingAppActiveHeight: 200,
-      typingActive: false // Add default for typingActive
-    }
+      typingActive: false, // Add default for typingActive
+    },
   });
 
   currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
@@ -268,7 +253,7 @@ app.whenReady().then(async () => {
     app.dock.setIcon(iconPath);
   }
 
-  // Initialize appState from store on app ready
+  // Initialize appState from store on app ready, including diarization and translation states
   runInAction(() => {
     appState.setEnableTranslation(store.get('enableTranslation', false));
     appState.setSourceLanguage(store.get('sourceLanguage', 'nova-2|multi'));
@@ -281,6 +266,14 @@ app.whenReady().then(async () => {
     appState.setTypingAppActiveHeight(store.get('typingAppActiveHeight', 200));
     appState.setTypingActive(store.get('typingActive', false));
   });
+
+  // Notify the renderer of the initial app state
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-app-state', {
+      enableTranslation: appState.enableTranslation,
+      diarizationEnabled: appState.diarizationEnabled,
+    });
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -307,10 +300,12 @@ ipcMain.on('open-settings', () => {
 });
 
 ipcMain.on('translation-setting-changed', (event, enableTranslation) => {
-  runInAction(() => { appState.setEnableTranslation(enableTranslation); });
+  runInAction(() => {
+    appState.setEnableTranslation(enableTranslation);
+  });
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('update-translation-ui', enableTranslation);
-    mainWindow.webContents.send('update-app-state', { enableTranslation }); // <-- Added synchronization
+    mainWindow.webContents.send('update-app-state', { enableTranslation });
   }
   store.set('enableTranslation', enableTranslation);
 });
@@ -374,11 +369,6 @@ ipcMain.on('update-global-shortcut', (event, newShortcut) => {
   }
 });
 
-// <-- New IPC handler to temporarily unregister global shortcuts during shortcut capture
-ipcMain.on('unregister-global-shortcut', () => {
-  globalShortcut.unregisterAll();
-});
-
 // IPC handlers for store operations
 ipcMain.handle('store-get', async (event, key, defaultValue) => {
   const value = store ? store.get(key, defaultValue) : defaultValue;
@@ -392,15 +382,34 @@ ipcMain.handle('store-set', async (event, key, value) => {
     console.log(`[Main] store-set: ${key} = ${value}`);
     runInAction(() => {
       switch (key) {
-        case 'enableTranslation': appState.setEnableTranslation(value); break;
-        case 'sourceLanguage': appState.setSourceLanguage(value); break;
-        case 'targetLanguage': appState.setTargetLanguage(value); break;
-        case 'deepgramApiKey': appState.setDeepgramApiKey(value); console.log(`[Main] Updated appState.deepgramApiKey: ${value}`); break;
-        case 'diarizationEnabled': appState.setDiarizationEnabled(value); break;
-        case 'typingAppGlobalShortcut': appState.setTypingAppGlobalShortcut(value); break;
-        case 'typingAppActiveWidth': appState.setTypingAppActiveWidth(value); break;
-        case 'typingAppActiveHeight': appState.setTypingAppActiveHeight(value); break;
-        case 'typingActive': appState.setTypingActive(value); break;
+        case 'enableTranslation':
+          appState.setEnableTranslation(value);
+          break;
+        case 'sourceLanguage':
+          appState.setSourceLanguage(value);
+          break;
+        case 'targetLanguage':
+          appState.setTargetLanguage(value);
+          break;
+        case 'deepgramApiKey':
+          appState.setDeepgramApiKey(value);
+          console.log(`[Main] Updated appState.deepgramApiKey: ${value}`);
+          break;
+        case 'diarizationEnabled':
+          appState.setDiarizationEnabled(value);
+          break;
+        case 'typingAppGlobalShortcut':
+          appState.setTypingAppGlobalShortcut(value);
+          break;
+        case 'typingAppActiveWidth':
+          appState.setTypingAppActiveWidth(value);
+          break;
+        case 'typingAppActiveHeight':
+          appState.setTypingAppActiveHeight(value);
+          break;
+        case 'typingActive':
+          appState.setTypingActive(value);
+          break;
       }
     });
     return true;

@@ -12,13 +12,12 @@ class AppState {
   isRecording = false;
   transcript = "";
   translatedText = "";
-  typingActive = false; // New property for typing mode toggle
+  typingActive = false;
 
   constructor() {
     makeAutoObservable(this);
   }
 
-  // Remove loadInitialState since it relied on ipcRenderer; it will be handled in main.js and renderer
   setEnableTranslation(value) {
     this.enableTranslation = value;
   }
@@ -77,5 +76,4 @@ class AppState {
 }
 
 const appState = new AppState();
-
 module.exports = { appState };

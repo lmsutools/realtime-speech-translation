@@ -1,36 +1,67 @@
 <!DOCTYPE html>
 <html>
-
-<head>
+  <head>
     <title>Realtime Translator</title>
     <link rel="stylesheet" href="styles.css">
-</head>
-
-<body>
+  </head>
+  <body>
     <div class="top-bar">
-        <div class="controls">
-            <button id="start" class="mic-button">Start</button>
-            <button id="stop" class="mic-button" style="display: none;">Stop</button>
-            <button id="reset">Reset</button>
-            <select id="pasteOption">
-                <option value="none">-Paste Option-</option>
-                <option value="source">Source</option>
-                <option value="translated">Translated</option>
-            </select> <button id="typingAppButton">Typing App</button> <select id="sourceLanguage"></select> <span
-                class="arrow">&rarr;</span> <select id="targetLanguage"></select>
-        </div>
-        <div id="settingsIcon">&#9881;</div>
+      <div class="controls">
+        <button id="start" class="mic-button">Start</button>
+        <button id="stop" class="mic-button" style="display: none;">Stop</button>
+        <button id="reset">Reset</button>
+        <select id="pasteOption">
+          <option value="none">-Paste Option-</option>
+          <option value="source">Source</option>
+          <option value="translated">Translated</option>
+        </select>
+        <button id="typingAppButton">Typing App</button>
+        <select id="sourceLanguage"></select>
+        <span class="arrow">&rarr;</span>
+        <select id="targetLanguage"></select>
+        <!-- New Toggle Buttons -->
+        <button id="toggleDiarize" class="toggle-button">Diarize</button>
+        <button id="toggleTranslate" class="toggle-button">Translate</button>
+      </div>
+      <div id="settingsIcon">&#9881;</div>
     </div>
     <div class="main-content">
-        <div class="pane source-pane">
-            <p id="source-text" class="text-display"></p>
-        </div>
-        <div class="pane translated-pane">
-            <p id="translated-text" class="text-display"></p>
-        </div>
+      <div class="pane source-pane">
+        <p id="source-text" class="text-display"></p>
+      </div>
+      <div class="pane translated-pane">
+        <p id="translated-text" class="text-display"></p>
+      </div>
     </div>
     <div class="bottom-bar"></div>
-    <script src="dist/bundle.js"></script>
-</body>
+    <script>
+      // Toggle Button State Management
+      document.addEventListener('DOMContentLoaded', function () {
+        const toggleDiarize = document.getElementById('toggleDiarize');
+        const toggleTranslate = document.getElementById('toggleTranslate');
 
+        // Load saved states from localStorage
+        if (localStorage.getItem('toggleDiarize') === 'true') {
+          toggleDiarize.classList.add('active');
+        }
+        if (localStorage.getItem('toggleTranslate') === 'true') {
+          toggleTranslate.classList.add('active');
+        }
+
+        // Event handler for toggling state
+        function toggleButton(button, key) {
+          button.classList.toggle('active');
+          localStorage.setItem(key, button.classList.contains('active'));
+        }
+
+        toggleDiarize.addEventListener('click', () => {
+          toggleButton(toggleDiarize, 'toggleDiarize');
+        });
+        toggleTranslate.addEventListener('click', () => {
+          toggleButton(toggleTranslate, 'toggleTranslate');
+        });
+      });
+    </script>
+    <script src="dist/bundle.js"></script>
+  </body>
 </html>

@@ -8,9 +8,7 @@ async function validateDeepgramToken(apiKey) {
     return { status: "not_set", message: "Deepgram API key is not set. Please set it in settings." };
   }
   try {
-    const response = await fetch("https://api.deepgram.com/v1/auth/token", {
-      headers: { "Authorization": `Token ${apiKey}` }
-    });
+    const response = await fetch("https://api.deepgram.com/v1/auth/token", { headers: { "Authorization": `Token ${apiKey}` } });
     if (response.ok) {
       return { status: "valid" };
     }
@@ -35,6 +33,17 @@ async function updateDeepgramValidationStatus() {
   }
 }
 
+function updateToggleButton(buttonId, isEnabled) {
+  const button = document.getElementById(buttonId);
+  if (button) {
+    if (isEnabled) {
+      button.classList.add('active');
+    } else {
+      button.classList.remove('active');
+    }
+  }
+}
+
 initializeUI();
 
 document.getElementById('start').addEventListener('click', startRecording);
@@ -46,15 +55,63 @@ document.getElementById('reset').addEventListener('click', () => {
   ipcRenderer.send('reset-typing-app');
   setTimeout(() => { document.getElementById('source-text').textContent = ''; }, 2000);
 });
-
 document.getElementById('typingAppButton').addEventListener('click', () => {
   console.log('[Renderer] Typing App button clicked');
   document.getElementById('pasteOption').value = 'source';
   ipcRenderer.send('open-typing-app');
 });
-
 document.getElementById('settingsIcon').addEventListener('click', () => {
   ipcRenderer.send('open-settings');
+});
+
+// Toggle button event listeners for top-bar buttons
+document.addEventListener('DOMContentLoaded', async () => {
+  const toggleDiarize = document.getElementById('toggleDiarize');
+  const toggleTranslate = document.getElementById('toggleTranslate');
+
+  // Load saved states from electron-store via IPC
+  const diarizationEnabled = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
+  const enableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+
+  appState.setDiarizationEnabled(diarizationEnabled);
+  appState.setEnableTranslation(enableTranslation);
+
+  // Initialize toggle UI states
+  updateToggleButton('toggleDiarize', diarizationEnabled);
+  updateToggleButton('toggleTranslate', enableTranslation);
+
+  toggleDiarize.addEventListener('click', () => {
+    const newState = !appState.diarizationEnabled;
+    appState.setDiarizationEnabled(newState);
+    updateToggleButton('toggleDiarize', newState);
+    ipcRenderer.invoke('store-set', 'diarizationEnabled', newState); // Persist to store
+  });
+
+  toggleTranslate.addEventListener('click', () => {
+    const newState = !appState.enableTranslation;
+    appState.setEnableTranslation(newState);
+    updateToggleButton('toggleTranslate', newState);
+    ipcRenderer.invoke('store-set', 'enableTranslation', newState); // Persist to store
+    updateTranslationUI(newState); // Update UI visibility
+    ipcRenderer.send('translation-setting-changed', newState); // Notify main process
+  });
+
+  const storedEnableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+  appState.setEnableTranslation(storedEnableTranslation);
+  console.log(`[Renderer] Initialized appState.enableTranslation to: ${storedEnableTranslation}`);
+  updateTranslationUI(storedEnableTranslation);
+  updateDeepgramValidationStatus();
+
+  const sourceLanguageSelect = document.getElementById('sourceLanguage');
+  if (sourceLanguageSelect) {
+    sourceLanguageSelect.addEventListener('change', () => {
+      const stopBtn = document.getElementById('stop');
+      if (stopBtn.style.display === 'block') {
+        stopRecording();
+        setTimeout(() => { startRecording(); }, 1000);
+      }
+    });
+  }
 });
 
 ipcRenderer.on('update-translation-ui', (event, enableTranslation) => {
@@ -88,26 +145,6 @@ ipcRenderer.on('typing-app-window-closed', () => {
   stopRecording();
 });
 
-// Load stored enableTranslation on startup and update UI accordingly
-document.addEventListener('DOMContentLoaded', async () => {
-  const storedEnableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
-  appState.setEnableTranslation(storedEnableTranslation);
-  console.log(`[Renderer] Initialized appState.enableTranslation to: ${storedEnableTranslation}`);
-  updateTranslationUI(storedEnableTranslation);
-  updateDeepgramValidationStatus();
-  const sourceLanguageSelect = document.getElementById('sourceLanguage');
-  if (sourceLanguageSelect) {
-    sourceLanguageSelect.addEventListener('change', () => {
-      const stopBtn = document.getElementById('stop');
-      if (stopBtn.style.display === 'block') {
-        stopRecording();
-        setTimeout(() => { startRecording(); }, 1000);
-      }
-    });
-  }
-});
-
-// Listen for state updates from main
 ipcRenderer.on('update-app-state', (event, data) => {
   if (typeof data.enableTranslation !== 'undefined') {
     appState.setEnableTranslation(data.enableTranslation);
