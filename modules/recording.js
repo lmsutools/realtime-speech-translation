@@ -11,53 +11,45 @@ let socket;
 let deepgramCaptions = [];       // store all raw Deepgram responses
 let transcriptions = [];         // store final transcripts so far (for context)
 let translations = [];           // store final translations so far
-let finalTranscription = "";
-// finalParagraphs: array of { speaker, text, endTime, sentenceCount }
-let finalParagraphs = [];
-// ephemeralWords: Map keyed by "start-end" => { start, end, speaker, text, confidence, language }
-let ephemeralWords = new Map();
+let finalTranscription = "";     // final plain text when diarization is off
+let finalParagraphs = [];        // final paragraphs when diarization is on
+let ephemeralWords = new Map();  // ephemeral words during transcription
 let autoStopTimerId = null;
 let typingActive = false;
+let preservedContent = "";       // Store content before a restart in its original format
 
 // For paragraph splitting logic
 const TIME_GAP_THRESHOLD = 3.0;           // seconds
 const MAX_SENTENCES_PER_PARAGRAPH = 3;
 
 // Predefined speaker label colors (for up to 10 speakers)
-const speakerPillColors = [
-  "#e91e63", // pink
-  "#9c27b0", // purple
-  "#673ab7", // deep purple
-  "#3f51b5", // indigo
-  "#2196f3", // blue
-  "#03a9f4", // light blue
-  "#00bcd4", // cyan
-  "#009688", // teal
-  "#4caf50", // green
-  "#8bc34a"  // light green
-];
+const speakerPillColors = ["#e91e63", "#9c27b0", "#673ab7", "#3f51b5", "#2196f3", "#03a9f4", "#00bcd4", "#009688", "#4caf50", "#8bc34a"];
 
 ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
   typingActive = isActive;
 });
 
-/**
- * Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.
- */
+/*** Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.*/
 function buildPlainTranscript(finalParas, ephemeralParas) {
   const combined = [...finalParas, ...ephemeralParas];
   return combined.map(para => para.text.trim()).join(' ');
 }
 
-/**
- * Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram,
- * and begins streaming audio data. If diarization is enabled, we do ephemeral
- * dictionary approach with color-coded labels; else, fallback to old approach.
- */
-export async function startRecording() {
+/*** Convert plain text transcription to paragraph structure for diarization */
+function convertTextToParagraphs(text) {
+  if (!text.trim()) return [];
+  return [{ speaker: 0, text: text.trim(), endTime: 0, sentenceCount: countSentenceEnders(text) }];
+}
+
+/*** Convert paragraphs to plain text transcription */
+function convertParagraphsToText(paragraphs) {
+  return paragraphs.map(p => p.text.trim()).join(' ');
+}
+
+/*** Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram */
+export async function startRecording(isRestart = false) {
   socket = null;
   try {
-    // Force-read diarization from store
     const diarizationEnabledFromStore = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
     runInAction(() => { appState.setDiarizationEnabled(diarizationEnabledFromStore); });
     const diarizationEnabled = appState.diarizationEnabled;
@@ -67,9 +59,7 @@ export async function startRecording() {
     let deepgramKey = appState.deepgramApiKey;
     if (!deepgramKey) {
       deepgramKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
-      if (deepgramKey) {
-        runInAction(() => { appState.setDeepgramApiKey(deepgramKey); });
-      }
+      if (deepgramKey) runInAction(() => { appState.setDeepgramApiKey(deepgramKey); });
     }
     if (!deepgramKey) {
       console.error('[Recording] No Deepgram API key set');
@@ -77,7 +67,6 @@ export async function startRecording() {
       ipcRenderer.send('typing-app-recording-state-changed', false);
       return;
     }
-    // Acquire audio from user’s microphone
     const selectedDeviceId = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
     let stream;
     if (selectedDeviceId && await isInputDeviceAvailable(selectedDeviceId)) {
@@ -85,10 +74,9 @@ export async function startRecording() {
     } else {
       console.warn('[Recording] Using default input device');
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      document.getElementById('source-text').textContent = 'Using default input device.';
+      if (!isRestart) document.getElementById('source-text').textContent = 'Using default input device.';
     }
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-    // Build Deepgram WebSocket URL
     let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
     if (diarizationEnabled) {
       queryParams += '&diarize=true';
@@ -101,10 +89,18 @@ export async function startRecording() {
       document.getElementById('source-text').textContent = "Deepgram connection failed.";
       ipcRenderer.send('typing-app-recording-state-changed', false);
     };
-    // On open, start capturing
     socket.onopen = async () => {
       console.log('[Recording] WebSocket opened');
-      document.getElementById('source-text').textContent = '';
+      runInAction(() => { appState.setIsRecording(true); });
+      if (isRestart && preservedContent) {
+        document.getElementById('source-text').innerHTML = preservedContent + '<br>';
+      } else if (!isRestart) {
+        preservedContent = "";
+        finalTranscription = "";
+        finalParagraphs = [];
+        ephemeralWords.clear();
+        document.getElementById('source-text').textContent = '';
+      }
       mediaRecorder.start(50);
       ipcRenderer.send('typing-app-recording-state-changed', true);
       console.log('[Recording] Recording started');
@@ -114,55 +110,44 @@ export async function startRecording() {
         document.getElementById('source-text').textContent += "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED---";
       }, autoStopTimer * 60000);
     };
-    // On each message from Deepgram
     socket.onmessage = async (event) => {
       const parsed = JSON.parse(event.data || '{}');
       deepgramCaptions.push(parsed);
-      // If diarization is off, fallback approach:
-      if (!appState.diarizationEnabled) {
-        handleNoDiarization(parsed);
-        return;
-      }
       const alt = parsed?.channel?.alternatives[0];
       if (!alt) return;
       const words = alt.words || [];
       const plainTranscript = alt.transcript || "";
-      // 1) Sync ephemeralWords with this partial chunk
-      syncEphemeralWords(ephemeralWords, words);
-      // 2) If partial => build ephemeral paragraphs + final => display
-      if (!parsed.is_final) {
-        const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
-        const html = buildHTMLTranscript(finalParagraphs, ephemeralParagraphs);
-        document.getElementById('source-text').innerHTML = html;
-        const plainText = buildPlainTranscript(finalParagraphs, ephemeralParagraphs);
-        ipcRenderer.send('typing-app-transcript-updated', plainText);
-      }
-      // 3) If final => move ephemeral paragraphs => final, clear ephemeral
-      else {
-        const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
-        finalParagraphs.push(...ephemeralParagraphs);
-        ephemeralWords.clear(); // done with ephemeral
-        finalTranscription = buildHTMLTranscript(finalParagraphs, []);
-        document.getElementById('source-text').innerHTML = finalTranscription;
-        const plainText = buildPlainTranscript(finalParagraphs, []);
-        ipcRenderer.send('typing-app-transcript-updated', plainText);
-        // For context & translation
-        transcriptions.push(plainTranscript);
-        if (transcriptions.length > 10) transcriptions.shift();
-        await handleTranslationAndPasting(plainTranscript, true);
-        // Log all responses so far
-        console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
+      if (appState.diarizationEnabled) {
+        syncEphemeralWords(ephemeralWords, words);
+        if (!parsed.is_final) {
+          const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
+          const newContent = buildHTMLTranscript(finalParagraphs, ephemeralParagraphs);
+          document.getElementById('source-text').innerHTML = (preservedContent ? preservedContent + '<br>' : '') + newContent;
+          const plainText = buildPlainTranscript(finalParagraphs, ephemeralParagraphs);
+          ipcRenderer.send('typing-app-transcript-updated', plainText);
+        } else {
+          const ephemeralParagraphs = buildParagraphsFromWords([...ephemeralWords.values()]);
+          finalParagraphs.push(...ephemeralParagraphs);
+          ephemeralWords.clear();
+          const newContent = buildHTMLTranscript(finalParagraphs, []);
+          document.getElementById('source-text').innerHTML = (preservedContent ? preservedContent + '<br>' : '') + newContent;
+          const plainText = buildPlainTranscript(finalParagraphs, []);
+          ipcRenderer.send('typing-app-transcript-updated', plainText);
+          transcriptions.push(plainTranscript);
+          if (transcriptions.length > 10) transcriptions.shift();
+          await handleTranslationAndPasting(plainTranscript, true);
+          console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
+        }
+      } else {
+        handleNoDiarization(parsed);
       }
     };
-    // On close
     socket.onclose = () => { console.log('[Recording] WebSocket connection closed'); };
-    // MediaRecorder -> send data to socket
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
         socket.send(e.data);
       }
     };
-    // Adjust UI
     document.getElementById('start').style.display = 'none';
     document.getElementById('stop').style.display = 'block';
   } catch (error) {
@@ -174,18 +159,18 @@ export async function startRecording() {
   }
 }
 
-/**
- * Stop the recording and close the socket
- */
+/*** Stop the recording and close the socket */
 export function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(track => track.stop());
     console.log('[Recording] Recording stopped');
   }
   if (socket) {
     socket.close();
     socket = null;
   }
+  runInAction(() => { appState.setIsRecording(false); });
   ipcRenderer.send('typing-app-recording-state-changed', false);
   if (autoStopTimerId) {
     clearTimeout(autoStopTimerId);
@@ -195,34 +180,26 @@ export function stopRecording() {
   document.getElementById('stop').style.display = 'none';
 }
 
-/**
- * Called by the "Reset" button in your UI.
- * If recording is active, do a "partial reset" so transcription continues.
- * If not recording, do a "full reset."
- */
+/*** Called by the "Reset" button in your UI */
 export function onResetClicked() {
-  // Check if we are currently recording
   const isRecordingActive = !!(mediaRecorder && mediaRecorder.state !== 'inactive' && socket);
   if (isRecordingActive) {
-    // PARTIAL RESET
     finalParagraphs = [];
     ephemeralWords.clear();
     finalTranscription = "";
     deepgramCaptions = [];
     transcriptions = [];
     translations = [];
+    preservedContent = "";
     document.getElementById('source-text').textContent = "";
     document.getElementById('translated-text').textContent = "";
     console.log('[Recording] Partial reset done. Recording continues...');
   } else {
-    // FULL RESET
     resetRecordingData();
   }
 }
 
-/**
- * If diarization is disabled, fallback approach
- */
+/*** If diarization is disabled, fallback approach */
 function handleNoDiarization(parsed) {
   const alt = parsed?.channel?.alternatives[0];
   if (!alt) return;
@@ -230,23 +207,21 @@ function handleNoDiarization(parsed) {
   if (!transcript.trim()) return;
   if (parsed.is_final) {
     finalTranscription += " " + transcript;
-    document.getElementById('source-text').textContent = finalTranscription;
+    const newContent = finalTranscription.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    document.getElementById('source-text').innerHTML = (preservedContent ? preservedContent + '<br>' : '') + newContent;
     transcriptions.push(transcript);
     if (transcriptions.length > 10) { transcriptions.shift(); }
     handleTranslationAndPasting(transcript, true);
     ipcRenderer.send('typing-app-transcript-updated', finalTranscription);
   } else {
     const interimText = finalTranscription + " " + transcript;
-    document.getElementById('source-text').textContent = interimText;
+    const newContent = interimText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    document.getElementById('source-text').innerHTML = (preservedContent ? preservedContent + '<br>' : '') + newContent;
     ipcRenderer.send('typing-app-transcript-updated', interimText);
   }
 }
 
-/**
- * The "full" reset for everything. This is used if not currently recording.
- * It clears all transcript data, but DOES NOT kill the mediaRecorder or socket
- * (because we might be disconnected already).
- */
+/*** The "full" reset for everything */
 export function resetRecordingData() {
   transcriptions = [];
   translations = [];
@@ -254,17 +229,14 @@ export function resetRecordingData() {
   finalTranscription = "";
   finalParagraphs = [];
   ephemeralWords.clear();
+  preservedContent = "";
   document.getElementById('source-text').textContent = "";
   document.getElementById('translated-text').textContent = "";
   console.log('[Recording] Full recording data reset');
 }
 
-/**
- * Compare ephemeralWords with the new chunk of words from Deepgram,
- * updating or removing items as needed so we reflect the latest partial updates.
- */
+/*** Compare ephemeralWords with the new chunk of words from Deepgram */
 function syncEphemeralWords(ephemeralMap, words) {
-  // 1) Build new partial map
   const newMap = new Map();
   for (const w of words) {
     const key = makeWordKey(w.start, w.end);
@@ -272,18 +244,16 @@ function syncEphemeralWords(ephemeralMap, words) {
       start: w.start,
       end: w.end,
       speaker: w.speaker,
-      text: w.word,  // or w.punctuated_word
+      text: w.word,
       confidence: w.confidence,
       language: w.language
     });
   }
-  // 2) Remove ephemeral words not in new partial
   for (const oldKey of ephemeralMap.keys()) {
     if (!newMap.has(oldKey)) {
       ephemeralMap.delete(oldKey);
     }
   }
-  // 3) Add or update ephemeral words
   for (const [key, val] of newMap) {
     if (!ephemeralMap.has(key)) {
       ephemeralMap.set(key, val);
@@ -296,22 +266,14 @@ function syncEphemeralWords(ephemeralMap, words) {
   }
 }
 
-/**
- * Make a unique key for each ephemeral word, e.g. "3.44-4.08"
- */
+/*** Make a unique key for each ephemeral word */
 function makeWordKey(start, end) {
   return `${start.toFixed(2)}-${end.toFixed(2)}`;
 }
 
-/**
- * Convert ephemeral or final word objects into paragraphs, splitting if:
- *  - time gap >= 3s
- *  - speaker changes
- *  - paragraph has >= 3 sentence enders
- */
+/*** Convert ephemeral or final word objects into paragraphs */
 function buildParagraphsFromWords(words) {
   if (!words.length) return [];
-  // Sort by start time
   words.sort((a, b) => a.start - b.start);
   let paragraphs = [];
   let currentPara = null;
@@ -338,9 +300,7 @@ function buildParagraphsFromWords(words) {
   return paragraphs;
 }
 
-/**
- * Create a new paragraph from a single word
- */
+/*** Create a new paragraph from a single word */
 function createParagraph(w) {
   return {
     speaker: w.speaker,
@@ -350,11 +310,7 @@ function createParagraph(w) {
   };
 }
 
-/**
- * Build an HTML-based transcript from final + ephemeral paragraphs,
- * color-coding speaker labels, skipping repeated labels if the same speaker
- * continues in the next paragraph.
- */
+/*** Build an HTML-based transcript */
 function buildHTMLTranscript(finalParas, ephemeralParas) {
   const combined = [...finalParas, ...ephemeralParas];
   if (!combined.length) return "";
@@ -364,37 +320,41 @@ function buildHTMLTranscript(finalParas, ephemeralParas) {
     const spk = para.speaker;
     const txt = para.text.trim();
     if (spk !== lastSpeaker) {
-      // label + color pill
       const color = getSpeakerColor(spk);
       const pill = `<span style="background-color: ${color};color: #fff;border-radius: 10px;padding: 2px 6px;margin-right: 6px;font-weight: 500;">speaker ${spk}</span>`;
       htmlParts.push(`<div>${pill} ${txt}</div>`);
       lastSpeaker = spk;
     } else {
-      // same speaker => no label
       htmlParts.push(`<div>${txt}</div>`);
     }
   }
   return htmlParts.join("");
 }
 
-/**
- * Return color for given speaker ID (0..n). We cycle through up to 10 colors.
- */
+/*** Return color for given speaker ID */
 function getSpeakerColor(speakerId) {
   return speakerPillColors[speakerId % speakerPillColors.length];
 }
 
-/**
- * Count sentence enders in text. Basic approach: . ? !
- */
+/*** Count sentence enders in text */
 function countSentenceEnders(text) {
   const matches = text.match(/[.!?]+/g);
   return matches ? matches.length : 0;
 }
 
-/**
- * If final transcript, handle translation/pasting if user wants it.
- */
+/*** Preserve current content before restarting */
+export function preserveCurrentContent() {
+  if (appState.diarizationEnabled) {
+    preservedContent = document.getElementById('source-text').innerHTML || buildHTMLTranscript(finalParagraphs, []);
+  } else {
+    preservedContent = document.getElementById('source-text').innerHTML || finalTranscription.trim();
+  }
+  finalParagraphs = [];
+  finalTranscription = "";
+  ephemeralWords.clear();
+}
+
+/*** If final transcript, handle translation/pasting */
 async function handleTranslationAndPasting(transcript, isFinal) {
   if (!transcript.trim()) {
     console.log('[Recording] Empty transcript, skipping');
