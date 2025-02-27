@@ -1,0 +1,254 @@
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background-color: var(--primary-dark);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  height: 60px;
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: white;
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+.logo-icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.secondary-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.main-content {
+  margin-top: 60px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1rem;
+  max-width: var(--content-width);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  transition: var(--transition);
+}
+
+.translated-pane.visible ~ .main-content {
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.translated-pane {
+  display: none;
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.translated-pane.visible {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.main-content:has(.translated-pane.visible) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.settings-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: white;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+}
+
+.settings-panel.visible {
+  transform: translateX(0);
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--neutral-200);
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--neutral-800);
+}
+
+.close-settings {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--neutral-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+
+.close-settings svg {
+  width: 18px;
+  height: 18px;
+}
+
+.close-settings:hover {
+  background-color: var(--neutral-100);
+  color: var(--neutral-800);
+}
+
+.tab-buttons {
+  display: flex;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--neutral-200);
+  gap: 0.5rem;
+}
+
+.tab-button {
+  flex: 1;
+  background: var(--neutral-100);
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--neutral-600);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tab-button:hover {
+  background: var(--neutral-200);
+}
+
+.tab-button.active {
+  background: var(--primary);
+  color: white;
+}
+
+.tab-content {
+  padding: var(--spacing-lg);
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.provider-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Prevents overflow issues */
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .top-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 0.75rem;
+  }
+  .app-logo {
+    flex: 1;
+    margin-bottom: 0.5rem;
+  }
+  .controls, .secondary-controls {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+  }
+  .main-content {
+    margin-top: 110px;
+  }
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content:has(.translated-pane.visible) {
+    grid-template-columns: 1fr;
+  }
+  .controls, .secondary-controls {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .feature-toggles {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .toggle-button, .action-button, .language-select, .minimal-select {
+    flex: 1;
+  }
+  .settings-panel {
+    width: 100%;
+    max-width: 360px;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+  .top-bar {
+    padding: 0.5rem;
+  }
+  .pane {
+    margin-bottom: 0.75rem;
+  }
+  .pane-header {
+    padding: 0.5rem 0.75rem;
+  }
+  .pane-content {
+    padding: 0.75rem;
+  }
+}

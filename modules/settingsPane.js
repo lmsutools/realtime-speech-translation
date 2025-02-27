@@ -1,5 +1,6 @@
 import { ipcRenderer } from 'electron';
-import { appState } from '../../stores/appState.js';
+import { appState } from '../stores/appState.js';
+import { populateInputDevices } from './devices.js';
 
 function debounce(func, wait) {
   let timeout;
@@ -11,9 +12,7 @@ function debounce(func, wait) {
 }
 
 async function validateDeepgramToken(apiKey) {
-  if (!apiKey) {
-    return { status: "not_set", message: "Deepgram API key is not set." };
-  }
+  if (!apiKey) return { status: "not_set", message: "Deepgram API key is not set." };
   try {
     const response = await fetch("https://api.deepgram.com/v1/auth/token", { headers: { "Authorization": `Token ${apiKey}` } });
     if (response.ok) return { status: "valid" };
@@ -25,73 +24,64 @@ async function validateDeepgramToken(apiKey) {
 }
 
 export async function loadSettings() {
+  const generalPane = document.getElementById('general');
+  generalPane.innerHTML = `
+    <div class="setting-group">
+      <label for="inputDeviceSettings">Input Device:</label>
+      <select id="inputDeviceSettings"></select>
+    </div>
+    <div class="setting-group">
+      <label for="autoStopTimer">Auto-Stop Timer (minutes):</label>
+      <input type="number" id="autoStopTimer" min="1" value="60">
+    </div>
+  `;
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
-  const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
   const defaultInputDevice = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
-
-  // Populate input devices
-  try {
-    await import('../devices.js').then(module => module.populateInputDevices('inputDeviceSettings')).then(() => {
-      if (defaultInputDevice) inputDeviceSettingsSelect.value = defaultInputDevice;
-    });
-  } catch (error) {
-    console.error('Error populating input devices:', error);
-  }
-
-  // Load values from store via IPC
-  const deepgramApiKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
+  await populateInputDevices('inputDeviceSettings');
+  if (defaultInputDevice) inputDeviceSettingsSelect.value = defaultInputDevice;
   const autoStopTimer = await ipcRenderer.invoke('store-get', 'autoStopTimer', 60);
-  console.log('[Settings] Loaded deepgramApiKey:', deepgramApiKey);
-
-  // Update appState and UI
-  const { runInAction } = require("mobx");
-  runInAction(() => {
-    appState.setDeepgramApiKey(deepgramApiKey);
-  });
-  deepgramApiKeyInput.value = deepgramApiKey;
   autoStopTimerInput.value = autoStopTimer;
 }
 
 export async function saveSettings() {
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
-  const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
-
   if (inputDeviceSettingsSelect) {
     ipcRenderer.invoke('store-set', 'defaultInputDevice', inputDeviceSettingsSelect.value);
-  }
-  if (deepgramApiKeyInput) {
-    const value = deepgramApiKeyInput.value;
-    appState.setDeepgramApiKey(value);
-    ipcRenderer.invoke('store-set', 'deepgramApiKey', value);
-    console.log('[Settings] Saving deepgramApiKey:', value);
   }
   if (autoStopTimerInput) {
     ipcRenderer.invoke('store-set', 'autoStopTimer', autoStopTimerInput.value);
   }
-
-  await import('./providerSettings.js').then(module => module.saveProviderSettings());
-  const apiKey = deepgramApiKeyInput.value;
-  const result = await validateDeepgramToken(apiKey);
-  ipcRenderer.send('deepgram-validation-result', result);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
   const inputDeviceSettingsSelect = document.getElementById('inputDeviceSettings');
-  const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const autoStopTimerInput = document.getElementById('autoStopTimer');
-
-  await import('./uiSettings.js').then(module => module.initializeSettingsUI());
+  await loadSettings();
   if (inputDeviceSettingsSelect) inputDeviceSettingsSelect.addEventListener('change', saveSettings);
-  if (deepgramApiKeyInput) {
-    const debouncedSaveSettings = debounce(saveSettings, 500);
-    deepgramApiKeyInput.addEventListener('input', debouncedSaveSettings);
-  }
   if (autoStopTimerInput) autoStopTimerInput.addEventListener('change', saveSettings);
 
-  await import('./providerSettings.js').then(module => module.initializeProviderSettingsUI());
-  await loadSettings();
-});
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabPanes = document.querySelectorAll('.tab-pane');
 
-import './typingApp.js'; // Ensure Typing App settings are included
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      tabPanes.forEach(pane => pane.classList.remove('active'));
+
+      button.classList.add('active');
+      const tabId = button.dataset.tab;
+      const targetPane = document.getElementById(tabId);
+      if (targetPane) {
+        targetPane.classList.add('active');
+      } else {
+        console.error(`Tab pane with ID '${tabId}' not found`);
+      }
+    });
+  });
+
+  document.querySelector('.close-settings').addEventListener('click', () => {
+    document.querySelector('.settings-panel').classList.remove('visible');
+  });
+});

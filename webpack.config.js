@@ -4,11 +4,10 @@ module.exports = {
     mode: 'development',
     target: 'electron-renderer',
     entry: {
-        bundle: './renderer.js', // Main entry point
-        settings: './modules/settings/mainSettings.js' // Settings entry point
+        bundle: './renderer.js', 
     },
     output: {
-        filename: '[name].js', // Output: bundle.js, settings.js
+        filename: '[name].js',
         path: path.resolve(__dirname, 'dist'),
     },
 };
