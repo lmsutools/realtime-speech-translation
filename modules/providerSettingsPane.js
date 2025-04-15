@@ -1,3 +1,5 @@
+import { appState } from '../stores/appState.js';
+import { debounce } from './ui.js';
 import { ipcRenderer } from 'electron';
 
 let translateAiProviders = [];
@@ -6,66 +8,51 @@ let editingProviderId = null;
 function generateUniqueId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
 }
-
 function getApiKeyStorageKey(providerId) {
   return `aiProviderApiKey_${providerId}`;
 }
 
 export async function loadProviderSettings() {
   const apiPane = document.getElementById('api');
-  apiPane.innerHTML = `
-    <div class="setting-group">
-      <label for="deepgramApiKey">Deepgram API Key:</label>
-      <input type="text" id="deepgramApiKey">
-    </div>
-    <div class="setting-group">
-      <h3>AI Providers</h3>
-      <div class="provider-grid">
-        <div class="provider-left">
-          <div id="providerList"></div>
-          <button class="add-provider-btn" id="addProviderButton">Add Provider</button>
-        </div>
-        <div class="provider-right">
-          <div id="providerDefaults">
-            <div class="setting-group">
-              <label for="defaultAiProviderSelect">Default Provider:</label>
-              <select id="defaultAiProviderSelect"></select>
-            </div>
-            <div class="setting-group">
-              <label for="defaultAiModelSelect">Default Model:</label>
-              <select id="defaultAiModelSelect"></select>
-            </div>
-          </div>
-          <div id="providerEditForm" class="setting-group" style="display: none;">
-            <label for="providerName">Name:</label>
-            <input type="text" id="providerName">
-            <label for="providerApiKey">API Key:</label>
-            <input type="text" id="providerApiKey">
-            <label for="providerModels">Models (comma-separated):</label>
-            <textarea id="providerModels"></textarea>
-            <label for="providerEndpoint">Endpoint:</label>
-            <input type="text" id="providerEndpoint">
-            <div class="form-actions">
-              <button id="saveProviderButton">Save</button>
-              <button id="cancelProviderButton">Cancel</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
+  apiPane.innerHTML = `<div class="setting-group"><label for="deepgramApiKey">Deepgram API Key:</label><input type="text" id="deepgramApiKey"></div><div class="setting-group"><h3>AI Providers</h3><div class="provider-grid"><div class="provider-left"><div id="providerList"></div><button class="add-provider-btn" id="addProviderButton">Add Provider</button></div><div class="provider-right"><div id="providerDefaults"><div class="setting-group"><label for="defaultAiProviderSelect">Default Provider:</label><select id="defaultAiProviderSelect"></select></div><div class="setting-group"><label for="defaultAiModelSelect">Default Model:</label><select id="defaultAiModelSelect"></select></div></div><div id="providerEditForm" class="setting-group" style="display: none;"><label for="providerName">Name:</label><input type="text" id="providerName"><label for="providerApiKey">API Key:</label><input type="text" id="providerApiKey"><label for="providerModels">Models (comma-separated):</label><textarea id="providerModels"></textarea><label for="providerEndpoint">Endpoint:</label><input type="text" id="providerEndpoint"><div class="form-actions"><button id="saveProviderButton">Save</button><button id="cancelProviderButton">Cancel</button></div></div></div></div></div>`;
   const deepgramApiKeyInput = document.getElementById('deepgramApiKey');
   const deepgramApiKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
   deepgramApiKeyInput.value = deepgramApiKey;
-
   const defaultProviders = [
-    { id: 'openai', name: "OpenAI", apiKeySettingKey: getApiKeyStorageKey('openai'), models: ['gpt-3.5-turbo', 'o3-mini-2025-01-31', 'gpt-4o-mini'], defaultModel: 'gpt-3.5-turbo', endpoint: "https://api.openai.com/v1/chat/completions" },
-    { id: 'sambanova', name: "SambaNova AI", apiKeySettingKey: getApiKeyStorageKey('sambanova'), models: ["DeepSeek-R1-Distill-Llama-70B"], defaultModel: "DeepSeek-R1-Distill-Llama-70B", endpoint: "https://api.sambanova.ai/v1/chat/completions" },
-    { id: 'gemini', name: "Google Gemini", apiKeySettingKey: getApiKeyStorageKey('gemini'), models: ["gemini-2.0-flash-001", "gemini-2.0-pro-exp-02-05"], defaultModel: "gemini-1.5-flash", endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", isGemini: true },
-    { id: 'groq', name: "Groq AI", apiKeySettingKey: getApiKeyStorageKey('groq'), models: ["distil-whisper-large-v3-en", "gemma2-9b-it"], defaultModel: "gemma2-9b-it", endpoint: "https://api.groq.com/openai/v1/chat/completions" }
+    {
+      id: 'openai',
+      name: "OpenAI",
+      apiKeySettingKey: getApiKeyStorageKey('openai'),
+      models: ['gpt-3.5-turbo', 'o3-mini-2025-01-31', 'gpt-4o-mini'],
+      defaultModel: 'gpt-3.5-turbo',
+      endpoint: "https://api.openai.com/v1/chat/completions"
+    },
+    {
+      id: 'sambanova',
+      name: "SambaNova AI",
+      apiKeySettingKey: getApiKeyStorageKey('sambanova'),
+      models: ["DeepSeek-R1-Distill-Llama-70B"],
+      defaultModel: "DeepSeek-R1-Distill-Llama-70B",
+      endpoint: "https://api.sambanova.ai/v1/chat/completions"
+    },
+    {
+      id: 'gemini',
+      name: "Google Gemini",
+      apiKeySettingKey: getApiKeyStorageKey('gemini'),
+      models: ["gemini-2.0-flash-001", "gemini-2.0-pro-exp-02-05"],
+      defaultModel: "gemini-1.5-flash",
+      endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      isGemini: true
+    },
+    {
+      id: 'groq',
+      name: "Groq AI",
+      apiKeySettingKey: getApiKeyStorageKey('groq'),
+      models: ["distil-whisper-large-v3-en", "gemma2-9b-it"],
+      defaultModel: "gemma2-9b-it",
+      endpoint: "https://api.groq.com/openai/v1/chat/completions"
+    }
   ];
-
   const storedProviders = await ipcRenderer.invoke('store-get', 'aiProviders', null);
   if (storedProviders) {
     try {
@@ -105,13 +92,7 @@ function populateProviderList() {
   translateAiProviders.forEach(provider => {
     const providerItem = document.createElement('div');
     providerItem.classList.add('provider-item');
-    providerItem.innerHTML = `
-      <span>${provider.name}</span>
-      <div class="provider-actions">
-        <button class="edit-provider" data-id="${provider.id}">Edit</button>
-        <button class="delete-provider" data-id="${provider.id}">Delete</button>
-      </div>
-    `;
+    providerItem.innerHTML = `<span>${provider.name}</span><div class="provider-actions"><button class="edit-provider" data-id="${provider.id}">Edit</button><button class="delete-provider" data-id="${provider.id}">Delete</button></div>`;
     providerListDiv.appendChild(providerItem);
   });
 }
@@ -148,21 +129,17 @@ async function showProviderEditForm(provider = null) {
   const providerEditFormDiv = document.getElementById('providerEditForm');
   const providerDefaultsDiv = document.getElementById('providerDefaults');
   if (!providerEditFormDiv || !providerDefaultsDiv) return;
-
   const providerNameInput = document.getElementById('providerName');
   const providerApiKeyInput = document.getElementById('providerApiKey');
   const providerModelsTextarea = document.getElementById('providerModels');
   const providerEndpointInput = document.getElementById('providerEndpoint');
   const translateDefaultAiModelSelect = document.getElementById('defaultAiModelSelect');
-
   editingProviderId = provider ? provider.id : null;
-
   // Hide defaults and show form with animation
   providerDefaultsDiv.style.display = 'none';
   providerEditFormDiv.style.display = 'block';
   providerEditFormDiv.classList.remove('fade-out');
   providerEditFormDiv.classList.add('fade-in');
-
   if (provider) {
     providerNameInput.value = provider.name;
     const apiKey = await ipcRenderer.invoke('store-get', provider.apiKeySettingKey, '');
@@ -190,18 +167,15 @@ function hideProviderEditForm() {
   const providerEditFormDiv = document.getElementById('providerEditForm');
   const providerDefaultsDiv = document.getElementById('providerDefaults');
   if (!providerEditFormDiv || !providerDefaultsDiv) return;
-
   providerEditFormDiv.classList.remove('fade-in');
   providerEditFormDiv.classList.add('fade-out');
-  
   // Wait for animation to complete before hiding
   setTimeout(() => {
     providerEditFormDiv.style.display = 'none';
     providerDefaultsDiv.style.display = 'block';
     providerDefaultsDiv.classList.remove('fade-out');
     providerDefaultsDiv.classList.add('fade-in');
-  }, 200); // Match animation duration
-
+  }, 200);
   editingProviderId = null;
 }
 
