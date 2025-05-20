@@ -1,82 +1,226 @@
-import { appState } from '../stores/appState.js';
 import { ipcRenderer } from 'electron';
 
-export async function translateWithAI(text, context, translationContext) {
-  if (!appState.enableTranslation) {
-    console.log("[Translation] Translation is disabled; skipping.");
-    return "";
-  }
-
+/**
+* Validate translation configuration
+* @returns {Object} Object with valid flag and message
+*/
+export async function validateTranslationConfig() {
   try {
-    const targetLangCode = appState.targetLanguage;
-    const targetLanguageMapping = {
-      en: "English",
-      es: "Spanish",
-      zh: "Chinese Simplified"
-    };
-    const targetLanguage = targetLanguageMapping[targetLangCode] || "English";
-
-    // Retrieve provider settings via ipcRenderer
-    const selectedProviderId = await ipcRenderer.invoke('store-get', 'translateDefaultAiProvider', 'openai');
-    const providersJson = await ipcRenderer.invoke('store-get', 'aiProviders', '[]');
-    const translateAiProviders = JSON.parse(providersJson);
-    const selectedProvider = translateAiProviders.find(provider => provider.id === selectedProviderId);
-
-    if (!selectedProvider) {
-      console.error(`AI Provider with ID "${selectedProviderId}" not found in settings.`);
-      return `AI Provider "${selectedProviderId}" not configured.`;
+    const aiProviders = await getAIProviders();
+    if (!aiProviders || aiProviders.length === 0) {
+      return {
+        valid: false,
+        message: "No AI providers configured. Please set up an AI provider in settings."
+      };
     }
 
-    const apiKey = await ipcRenderer.invoke('store-get', selectedProvider.apiKeySettingKey, '');
-    const translateAiModel = await ipcRenderer.invoke('store-get', 'translateDefaultAiModel', selectedProvider.defaultModel);
+    const defaultProviderId = await ipcRenderer.invoke('store-get', 'translateDefaultAiProvider', '');
+    if (!defaultProviderId) {
+      return {
+        valid: false,
+        message: "No default AI provider selected. Please select a default provider in settings."
+      };
+    }
 
+    const provider = aiProviders.find(p => p.id === defaultProviderId);
+    if (!provider) {
+      return {
+        valid: false,
+        message: `Selected provider '${defaultProviderId}' not found. Please check your settings.`
+      };
+    }
+
+    const apiKey = await ipcRenderer.invoke('store-get', provider.apiKeySettingKey, '');
     if (!apiKey) {
-      console.error(`${selectedProvider.name} API key is not set. Please set it in settings.`);
-      return `${selectedProvider.name} API key not set.`;
+      return {
+        valid: false,
+        message: `API key for ${provider.name} is not set. Please add it in the API Keys settings.`
+      };
     }
 
-    console.log("Using AI Provider:", selectedProvider.name);
-    console.log("Using AI Model:", translateAiModel);
+    return { valid: true };
+  } catch (error) {
+    console.error('[Translation] Config validation error:', error);
+    return {
+      valid: false,
+      message: `Error validating translation config: ${error.message}`
+    };
+  }
+}
 
-    let apiEndpoint = selectedProvider.endpoint;
-    if (selectedProvider.id === 'gemini') {
-      apiEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-    } else if (selectedProvider.id === 'groq') {
-      apiEndpoint = "https://api.groq.com/openai/v1/chat/completions";
+/**
+* Get AI providers
+*/
+async function getAIProviders() {
+  const storedProviders = await ipcRenderer.invoke('store-get', 'aiProviders', null);
+  if (!storedProviders) return [];
+  try {
+    return JSON.parse(storedProviders);
+  } catch (e) {
+    console.error("Error parsing stored aiProviders:", e);
+    return [];
+  }
+}
+
+/**
+* Build the AI prompt for translation
+*/
+function buildTranslationPrompt(text, context, previousTranslations, targetLanguage) {
+  return {
+    system: `You are a professional translator. Translate the given text to ${targetLanguage}.
+Maintain the same tone, style, and intent of the original.
+If there are multiple speakers, preserve the speaker shifts in your translation.
+Respond ONLY with the translation, nothing else.`,
+    messages: [
+      {
+        role: "user",
+        content: `Translate this text to ${targetLanguage}: "${text}"
+${context ? `\nContext (previous sentences for reference): ${context}` : ''}
+${previousTranslations ? `\nPrevious translations: ${previousTranslations}` : ''}`
+      }
+    ]
+  };
+}
+
+/**
+* Translate text using the configured AI provider
+*/
+export async function translateWithAI(text, context = '', previousTranslations = '') {
+  console.log('[Translation] Starting translation for:', text);
+  try {
+    // Update translation status in UI
+    const translatedTextElement = document.getElementById('translated-text');
+    if (translatedTextElement) {
+      const statusIndicator = document.createElement('div');
+      statusIndicator.className = 'translation-status';
+      statusIndicator.textContent = 'Translating...';
+      translatedTextElement.appendChild(statusIndicator);
+      // Force UI update
+      await new Promise(resolve => setTimeout(resolve, 10));
     }
 
-    const requestBody = {
-      model: translateAiModel,
-      messages: [{
-        role: 'user',
-        content: `### **Translation Guidelines**:1. **Contextual Continuity**: Use the provided context to predict and translate the next word naturally.2. **Accuracy & Brevity**: Ensure translations are concise and grammatically correct.3. **Preserve English Words**: Maintain words already in English.4. **Names & Locations**: Retain original names and locations.5. **Omit Quotation Marks**: Do not include quotation marks or extra characters.6. **Skip Ambiguous Words**: Skip words if uncertain.7. **No Redundancies**: Avoid repeating already translated words.8. **Avoid Over-translation**: Do not retranslate words already correctly translated.9. **Natural Translation**: Ensure natural phrasing.10. **Speed & Precision**: Prioritize fast, accurate translations.#### Translate the following text to ${targetLanguage}:- **Input**: Text: "${text}"- Input Context: "${context}"- Translation Context: "${translationContext}"Output:`
-      }],
+    // Validate config first
+    const validationResult = await validateTranslationConfig();
+    if (!validationResult.valid) {
+      console.error('[Translation] Invalid config:', validationResult.message);
+      return `Translation Error: ${validationResult.message}`;
+    }
+
+    const aiProviders = await getAIProviders();
+    const defaultProviderId = await ipcRenderer.invoke('store-get', 'translateDefaultAiProvider', 'openai');
+    const provider = aiProviders.find(p => p.id === defaultProviderId);
+    if (!provider) {
+      console.error('[Translation] Provider not found:', defaultProviderId);
+      return "Translation Error: Selected AI provider not found";
+    }
+
+    const apiKey = await ipcRenderer.invoke('store-get', provider.apiKeySettingKey, '');
+    const defaultModel = await ipcRenderer.invoke('store-get', 'translateDefaultAiModel', provider.defaultModel);
+    const targetLanguage = await ipcRenderer.invoke('store-get', 'targetLanguage', 'en');
+    console.log(`[Translation] Using provider: ${provider.name}, model: ${defaultModel}, endpoint: ${provider.endpoint}`);
+
+    // Format differently for Gemini
+    const isGemini = !!provider.isGemini;
+    const endpoint = provider.endpoint;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
     };
 
-    console.log("Sending translation request to:", apiEndpoint);
-    console.log("Request body:", requestBody);
+    const prompt = buildTranslationPrompt(text, context, previousTranslations, targetLanguage);
 
-    const response = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Error in translation request: ${response.status} ${response.statusText}. Response: ${errorText}`);
-      return `Translation Error: ${response.statusText}`;
+    // Different request formats for different providers
+    let requestBody;
+    if (isGemini) {
+      requestBody = {
+        model: defaultModel,
+        messages: [
+          {
+            role: "system",
+            content: prompt.system
+          },
+          ...prompt.messages
+        ],
+        temperature: 0.3,
+        max_tokens: 1024
+      };
+    } else {
+      // Standard OpenAI compatible format
+      requestBody = {
+        model: defaultModel,
+        messages: [
+          {
+            role: "system",
+            content: prompt.system
+          },
+          ...prompt.messages
+        ],
+        temperature: 0.3,
+        max_tokens: 1024
+      };
     }
 
-    const result = await response.json();
-    const translatedText = (result.choices && result.choices[0]?.message?.content) ?
-      result.choices[0].message.content.replaceAll('"', '').replaceAll(`'`, '') : '';
-    return translatedText.replace(/<think>.*?<\/think>/gs, '').trim();
+    console.log('[Translation] Sending request to:', endpoint);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error(`[Translation] API error (${response.status}):`, errorData);
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[Translation] Response data:', data);
+
+      // Extract response text based on API format
+      let translatedText;
+      if (data.choices && data.choices[0] && data.choices[0].message) {
+        translatedText = data.choices[0].message.content;
+      } else if (data.content) {
+        translatedText = data.content;
+      } else if (data.text) {
+        translatedText = data.text;
+      } else {
+        console.error('[Translation] Unknown response format:', data);
+        throw new Error('Unknown API response format');
+      }
+
+      // Clean up any quotes
+      translatedText = translatedText.replace(/^["']|["']$/g, '');
+      console.log('[Translation] Final translated text:', translatedText);
+
+      return translatedText;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timed out after 30 seconds');
+      }
+      throw fetchError;
+    }
   } catch (error) {
-    console.error('Error during translation:', error.message);
+    console.error('[Translation] Error during translation:', error);
     return `Translation Error: ${error.message}`;
+  } finally {
+    // Remove status indicators
+    const translatedTextElement = document.getElementById('translated-text');
+    if (translatedTextElement) {
+      const statusElements = translatedTextElement.querySelectorAll('.translation-status');
+      statusElements.forEach(elem => {
+        if (elem.parentNode === translatedTextElement) {
+          elem.parentNode.removeChild(elem);
+        }
+      });
+    }
   }
 }

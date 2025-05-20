@@ -1,10 +1,9 @@
 const path = require('path');
-
 module.exports = {
     mode: 'development',
     target: 'electron-renderer',
     entry: {
-        bundle: './renderer.js', 
+        bundle: ['./bridgeConnector.js', './renderer.js'],
     },
     output: {
         filename: '[name].js',

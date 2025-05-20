@@ -1,4 +1,4 @@
-import { translateWithAI } from './translation.js';
+import { translateWithAI, validateTranslationConfig } from './translation.js';
 import { pasteText } from './utils.js';
 import { isInputDeviceAvailable } from './devices.js';
 import { appState } from '../stores/appState.js';
@@ -13,10 +13,12 @@ let transcriptions = [];         // store final transcripts so far (for context)
 let translations = [];           // store final translations so far
 let finalTranscription = "";     // final plain text when diarization is off
 let finalParagraphs = [];        // final paragraphs when diarization is on
+let translationParagraphs = [];  // store final translated paragraphs when diarization is on
 let ephemeralWords = new Map();  // ephemeral words during transcription
 let autoStopTimerId = null;
 let typingActive = false;
 let preservedContent = "";       // Store content before a restart in its original format
+let isTranslating = false;       // Translation in progress flag
 
 // For paragraph splitting logic
 const TIME_GAP_THRESHOLD = 3.0;           // seconds
@@ -29,24 +31,32 @@ ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
   typingActive = isActive;
 });
 
-/*** Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.*/
+/**
+* Build plain text transcript from final and ephemeral paragraphs, excluding speaker labels.
+*/
 function buildPlainTranscript(finalParas, ephemeralParas) {
   const combined = [...finalParas, ...ephemeralParas];
   return combined.map(para => para.text.trim()).join(' ');
 }
 
-/*** Convert plain text transcription to paragraph structure for diarization */
+/**
+* Convert plain text transcription to paragraph structure for diarization
+*/
 function convertTextToParagraphs(text) {
   if (!text.trim()) return [];
   return [{ speaker: 0, text: text.trim(), endTime: 0, sentenceCount: countSentenceEnders(text) }];
 }
 
-/*** Convert paragraphs to plain text transcription */
+/**
+* Convert paragraphs to plain text transcription
+*/
 function convertParagraphsToText(paragraphs) {
   return paragraphs.map(p => p.text.trim()).join(' ');
 }
 
-/*** Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram */
+/**
+* Called by the "Start" button. Opens the mic, sets up WebSocket to Deepgram
+*/
 export async function startRecording(isRestart = false) {
   socket = null;
   try {
@@ -54,19 +64,31 @@ export async function startRecording(isRestart = false) {
     runInAction(() => { appState.setDiarizationEnabled(diarizationEnabledFromStore); });
     const diarizationEnabled = appState.diarizationEnabled;
     console.log('[Recording] diarizationEnabled:', diarizationEnabled);
+
     const combined = appState.sourceLanguage;
     const [selectedModel, selectedLanguage] = combined.split('|');
+
     let deepgramKey = appState.deepgramApiKey;
     if (!deepgramKey) {
       deepgramKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
       if (deepgramKey) runInAction(() => { appState.setDeepgramApiKey(deepgramKey); });
     }
+
     if (!deepgramKey) {
       console.error('[Recording] No Deepgram API key set');
       document.getElementById('source-text').textContent = 'Please set a Deepgram API key in settings.';
       ipcRenderer.send('typing-app-recording-state-changed', false);
       return;
     }
+
+    // Validate translation configuration if enabled
+    if (appState.enableTranslation) {
+      const validationResult = await validateTranslationConfig();
+      if (!validationResult.valid) {
+        document.getElementById('translated-text').innerHTML = `<span class="error-message">${validationResult.message}</span>`;
+      }
+    }
+
     const selectedDeviceId = await ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
     let stream;
     if (selectedDeviceId && await isInputDeviceAvailable(selectedDeviceId)) {
@@ -76,47 +98,62 @@ export async function startRecording(isRestart = false) {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!isRestart) document.getElementById('source-text').textContent = 'Using default input device.';
     }
+
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
     let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
     if (diarizationEnabled) {
       queryParams += '&diarize=true';
     }
+
     const wsUrl = `wss://api.deepgram.com/v1/listen${queryParams}`;
     console.log('[Recording] WebSocket URL:', wsUrl);
+
     socket = new WebSocket(wsUrl, ['token', deepgramKey]);
+
     socket.onerror = (error) => {
       console.error('[Recording] WebSocket error:', error);
       document.getElementById('source-text').textContent = "Deepgram connection failed.";
       ipcRenderer.send('typing-app-recording-state-changed', false);
     };
+
     socket.onopen = async () => {
       console.log('[Recording] WebSocket opened');
       runInAction(() => { appState.setIsRecording(true); });
+
       if (isRestart && preservedContent) {
         document.getElementById('source-text').innerHTML = preservedContent + '<br>';
       } else if (!isRestart) {
         preservedContent = "";
         finalTranscription = "";
         finalParagraphs = [];
+        translationParagraphs = [];
         ephemeralWords.clear();
         document.getElementById('source-text').textContent = '';
+        document.getElementById('translated-text').textContent = '';
       }
+
       mediaRecorder.start(50);
       ipcRenderer.send('typing-app-recording-state-changed', true);
       console.log('[Recording] Recording started');
+
       const autoStopTimer = await ipcRenderer.invoke('store-get', 'autoStopTimer', 60);
       autoStopTimerId = setTimeout(() => {
         stopRecording();
         document.getElementById('source-text').textContent += "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED---";
       }, autoStopTimer * 60000);
     };
+
     socket.onmessage = async (event) => {
       const parsed = JSON.parse(event.data || '{}');
       deepgramCaptions.push(parsed);
+
       const alt = parsed?.channel?.alternatives[0];
       if (!alt) return;
+
       const words = alt.words || [];
       const plainTranscript = alt.transcript || "";
+
       if (appState.diarizationEnabled) {
         syncEphemeralWords(ephemeralWords, words);
         if (!parsed.is_final) {
@@ -135,19 +172,22 @@ export async function startRecording(isRestart = false) {
           ipcRenderer.send('typing-app-transcript-updated', plainText);
           transcriptions.push(plainTranscript);
           if (transcriptions.length > 10) transcriptions.shift();
-          await handleTranslationAndPasting(plainTranscript, true);
+          await handleTranslationAndPasting(plainTranscript, true, ephemeralParagraphs);
           console.log('[Recording] All Deepgram Responses:', deepgramCaptions);
         }
       } else {
         handleNoDiarization(parsed);
       }
     };
+
     socket.onclose = () => { console.log('[Recording] WebSocket connection closed'); };
+
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
         socket.send(e.data);
       }
     };
+
     document.getElementById('start').style.display = 'none';
     document.getElementById('stop').style.display = 'block';
   } catch (error) {
@@ -159,32 +199,41 @@ export async function startRecording(isRestart = false) {
   }
 }
 
-/*** Stop the recording and close the socket */
+/**
+* Stop the recording and close the socket
+*/
 export function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
     mediaRecorder.stream.getTracks().forEach(track => track.stop());
     console.log('[Recording] Recording stopped');
   }
+
   if (socket) {
     socket.close();
     socket = null;
   }
+
   runInAction(() => { appState.setIsRecording(false); });
   ipcRenderer.send('typing-app-recording-state-changed', false);
+
   if (autoStopTimerId) {
     clearTimeout(autoStopTimerId);
     autoStopTimerId = null;
   }
+
   document.getElementById('start').style.display = 'block';
   document.getElementById('stop').style.display = 'none';
 }
 
-/*** Called by the "Reset" button in your UI */
+/**
+* Called by the "Reset" button in your UI
+*/
 export function onResetClicked() {
   const isRecordingActive = !!(mediaRecorder && mediaRecorder.state !== 'inactive' && socket);
   if (isRecordingActive) {
     finalParagraphs = [];
+    translationParagraphs = [];
     ephemeralWords.clear();
     finalTranscription = "";
     deepgramCaptions = [];
@@ -199,12 +248,15 @@ export function onResetClicked() {
   }
 }
 
-/*** If diarization is disabled, fallback approach */
+/**
+* If diarization is disabled, fallback approach
+*/
 function handleNoDiarization(parsed) {
   const alt = parsed?.channel?.alternatives[0];
   if (!alt) return;
   const transcript = alt.transcript || "";
   if (!transcript.trim()) return;
+
   if (parsed.is_final) {
     finalTranscription += " " + transcript;
     const newContent = finalTranscription.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -221,13 +273,16 @@ function handleNoDiarization(parsed) {
   }
 }
 
-/*** The "full" reset for everything */
+/**
+* The "full" reset for everything
+*/
 export function resetRecordingData() {
   transcriptions = [];
   translations = [];
   deepgramCaptions = [];
   finalTranscription = "";
   finalParagraphs = [];
+  translationParagraphs = [];
   ephemeralWords.clear();
   preservedContent = "";
   document.getElementById('source-text').textContent = "";
@@ -235,7 +290,9 @@ export function resetRecordingData() {
   console.log('[Recording] Full recording data reset');
 }
 
-/*** Compare ephemeralWords with the new chunk of words from Deepgram */
+/**
+* Compare ephemeralWords with the new chunk of words from Deepgram
+*/
 function syncEphemeralWords(ephemeralMap, words) {
   const newMap = new Map();
   for (const w of words) {
@@ -249,11 +306,13 @@ function syncEphemeralWords(ephemeralMap, words) {
       language: w.language
     });
   }
+
   for (const oldKey of ephemeralMap.keys()) {
     if (!newMap.has(oldKey)) {
       ephemeralMap.delete(oldKey);
     }
   }
+
   for (const [key, val] of newMap) {
     if (!ephemeralMap.has(key)) {
       ephemeralMap.set(key, val);
@@ -266,25 +325,33 @@ function syncEphemeralWords(ephemeralMap, words) {
   }
 }
 
-/*** Make a unique key for each ephemeral word */
+/**
+* Make a unique key for each ephemeral word
+*/
 function makeWordKey(start, end) {
   return `${start.toFixed(2)}-${end.toFixed(2)}`;
 }
 
-/*** Convert ephemeral or final word objects into paragraphs */
+/**
+* Convert ephemeral or final word objects into paragraphs
+*/
 function buildParagraphsFromWords(words) {
   if (!words.length) return [];
   words.sort((a, b) => a.start - b.start);
+
   let paragraphs = [];
   let currentPara = null;
+
   for (const w of words) {
     if (!currentPara) {
       currentPara = createParagraph(w);
       continue;
     }
+
     const gap = w.start - currentPara.endTime;
     const sameSpeaker = (w.speaker === currentPara.speaker);
     const newSentCount = currentPara.sentenceCount + countSentenceEnders(w.text);
+
     if (gap >= TIME_GAP_THRESHOLD || !sameSpeaker || newSentCount >= MAX_SENTENCES_PER_PARAGRAPH) {
       paragraphs.push(currentPara);
       currentPara = createParagraph(w);
@@ -294,13 +361,17 @@ function buildParagraphsFromWords(words) {
       currentPara.sentenceCount = newSentCount;
     }
   }
+
   if (currentPara) {
     paragraphs.push(currentPara);
   }
+
   return paragraphs;
 }
 
-/*** Create a new paragraph from a single word */
+/**
+* Create a new paragraph from a single word
+*/
 function createParagraph(w) {
   return {
     speaker: w.speaker,
@@ -310,12 +381,16 @@ function createParagraph(w) {
   };
 }
 
-/*** Build an HTML-based transcript */
+/**
+* Build an HTML-based transcript
+*/
 function buildHTMLTranscript(finalParas, ephemeralParas) {
   const combined = [...finalParas, ...ephemeralParas];
   if (!combined.length) return "";
+
   let htmlParts = [];
   let lastSpeaker = null;
+
   for (const para of combined) {
     const spk = para.speaker;
     const txt = para.text.trim();
@@ -328,21 +403,28 @@ function buildHTMLTranscript(finalParas, ephemeralParas) {
       htmlParts.push(`<div>${txt}</div>`);
     }
   }
+
   return htmlParts.join("");
 }
 
-/*** Return color for given speaker ID */
+/**
+* Return color for given speaker ID
+*/
 function getSpeakerColor(speakerId) {
   return speakerPillColors[speakerId % speakerPillColors.length];
 }
 
-/*** Count sentence enders in text */
+/**
+* Count sentence enders in text
+*/
 function countSentenceEnders(text) {
   const matches = text.match(/[.!?]+/g);
   return matches ? matches.length : 0;
 }
 
-/*** Preserve current content before restarting */
+/**
+* Preserve current content before restarting
+*/
 export function preserveCurrentContent() {
   if (appState.diarizationEnabled) {
     preservedContent = document.getElementById('source-text').innerHTML || buildHTMLTranscript(finalParagraphs, []);
@@ -354,46 +436,209 @@ export function preserveCurrentContent() {
   ephemeralWords.clear();
 }
 
-/*** If final transcript, handle translation/pasting */
-async function handleTranslationAndPasting(transcript, isFinal) {
+/**
+* Show translation status in the UI
+*/
+function updateTranslationStatus(message, isError = false) {
+  const translatedText = document.getElementById('translated-text');
+  if (!translatedText) return;
+
+  if (isError) {
+    translatedText.innerHTML += `<span class="error-message">${message}</span><br>`;
+  } else {
+    // Add a small status indicator at the end
+    const statusElem = document.createElement('div');
+    statusElem.className = 'translation-status';
+    statusElem.textContent = message;
+    translatedText.appendChild(statusElem);
+
+    // Auto-remove status after 3 seconds
+    setTimeout(() => {
+      if (statusElem.parentNode === translatedText) {
+        translatedText.removeChild(statusElem);
+      }
+    }, 3000);
+  }
+}
+
+/**
+* Extract speaker ID from the most recent paragraph or source content
+*/
+function extractCurrentSpeakerId() {
+  // Try to get speaker from the most recent paragraph
+  if (finalParagraphs.length > 0) {
+    return finalParagraphs[finalParagraphs.length - 1].speaker;
+  }
+  
+  // Fallback: try to extract from source-text HTML
+  const sourceText = document.getElementById('source-text');
+  if (sourceText) {
+    const speakerMatch = /speaker\s+(\d+)/i.exec(sourceText.innerHTML);
+    if (speakerMatch && speakerMatch[1]) {
+      return parseInt(speakerMatch[1]);
+    }
+  }
+  
+  // Default to speaker 0 if nothing found
+  return 0;
+}
+
+/**
+* If final transcript, handle translation/pasting
+*/
+async function handleTranslationAndPasting(transcript, isFinal, sourceParagraphs = []) {
   if (!transcript.trim()) {
     console.log('[Recording] Empty transcript, skipping');
     return;
   }
+
   if (!isFinal) {
     console.log('[Recording] Not a final transcript, skipping');
     return;
   }
+
   const pasteOption = document.getElementById('pasteOption').value;
   const translationEnabled = appState.enableTranslation;
-  console.log(`[Recording] Handling: transcript="${transcript}", pasteOption=${pasteOption}, translationEnabled=${translationEnabled}, typingActive=${typingActive}`);
+  console.log(`[Recording] Handling transcript: "${transcript}"`);
+  console.log(`[Recording] Options: pasteOption=${pasteOption}, translationEnabled=${translationEnabled}, typingActive=${typingActive}`);
+
   if (typingActive) {
     if (pasteOption === 'source') {
       console.log(`[Recording] Pasting source text: "${transcript}"`);
       await pasteText(transcript);
     } else if (pasteOption === 'translated' && translationEnabled) {
-      console.log(`[Recording] Translating and pasting: "${transcript}"`);
-      const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
-      document.getElementById('translated-text').textContent += " " + translation;
-      if (translation.startsWith("Translation Error:")) {
-        console.log(`[Recording] Translation failed: "${translation}", pasting original: "${transcript}"`);
-        await pasteText(transcript);
-      } else {
-        console.log(`[Recording] Translation succeeded: "${translation}", pasting`);
-        translations.push(translation);
-        if (translations.length > 10) translations.shift();
-        await pasteText(translation);
+      console.log(`[Recording] Translation requested for: "${transcript}"`);
+      // Check if already translating to prevent multiple simultaneous calls
+      if (isTranslating) {
+        console.log('[Recording] Translation already in progress, skipping');
+        return;
+      }
+
+      // Validate translation config first
+      const configValid = await validateTranslationConfig();
+      if (!configValid.valid) {
+        console.error('[Recording] Translation config invalid:', configValid.message);
+        updateTranslationStatus(configValid.message, true);
+        await pasteText(transcript); // Fallback to source text
+        return;
+      }
+
+      try {
+        isTranslating = true;
+        updateTranslationStatus("Translating...");
+        console.log('[Recording] Starting translation process...');
+        const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
+        console.log(`[Recording] Translation result: "${translation}"`);
+
+        if (translation.startsWith("Translation Error:")) {
+          console.error(`[Recording] Translation failed: "${translation}"`);
+          updateTranslationStatus(translation, true);
+          await pasteText(transcript); // Fallback to source text
+        } else {
+          console.log(`[Recording] Translation succeeded: "${translation}"`);
+          
+          // Handle diarization formatting
+          if (appState.diarizationEnabled) {
+            // Get the current speaker ID
+            const speakerId = extractCurrentSpeakerId();
+            
+            // Create a paragraph object for the translation
+            const translatedParagraph = {
+              speaker: speakerId,
+              text: translation,
+              endTime: 0,
+              sentenceCount: countSentenceEnders(translation)
+            };
+            
+            // Add to translation paragraphs
+            translationParagraphs.push(translatedParagraph);
+            
+            // Generate HTML for the translation pane
+            const translationHTML = buildHTMLTranscript(translationParagraphs, []);
+            document.getElementById('translated-text').innerHTML = translationHTML;
+          } else {
+            // No diarization - append plain text
+            document.getElementById('translated-text').textContent += " " + translation;
+          }
+          
+          translations.push(translation);
+          if (translations.length > 10) translations.shift();
+          await pasteText(translation);
+        }
+      } catch (error) {
+        console.error('[Recording] Translation error:', error);
+        updateTranslationStatus(`Translation Error: ${error.message}`, true);
+        await pasteText(transcript); // Fallback to source text
+      } finally {
+        isTranslating = false;
       }
     }
   } else {
     if (pasteOption === 'translated' && translationEnabled) {
       console.log(`[Recording] Translating (no typing): "${transcript}"`);
-      const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
-      document.getElementById('translated-text').textContent += " " + translation;
-      if (!translation.startsWith("Translation Error:")) {
-        translations.push(translation);
-        if (translations.length > 10) translations.shift();
+      // Check if already translating
+      if (isTranslating) {
+        console.log('[Recording] Translation already in progress, skipping');
+        return;
+      }
+
+      // Validate translation config first
+      const configValid = await validateTranslationConfig();
+      if (!configValid.valid) {
+        console.error('[Recording] Translation config invalid:', configValid.message);
+        updateTranslationStatus(configValid.message, true);
+        return;
+      }
+
+      try {
+        isTranslating = true;
+        updateTranslationStatus("Translating...");
+        console.log('[Recording] Starting translation process...');
+        const translation = await translateWithAI(transcript, transcriptions.join(' '), translations.join(' '));
+        console.log(`[Recording] Translation result: "${translation}"`);
+
+        if (translation.startsWith("Translation Error:")) {
+          console.error(`[Recording] Translation failed: "${translation}"`);
+          updateTranslationStatus(translation, true);
+        } else {
+          console.log(`[Recording] Translation succeeded: "${translation}"`);
+          
+          // Handle diarization formatting
+          if (appState.diarizationEnabled) {
+            // Get the current speaker ID
+            const speakerId = extractCurrentSpeakerId();
+            
+            // Create a paragraph object for the translation
+            const translatedParagraph = {
+              speaker: speakerId,
+              text: translation,
+              endTime: 0,
+              sentenceCount: countSentenceEnders(translation)
+            };
+            
+            // Add to translation paragraphs
+            translationParagraphs.push(translatedParagraph);
+            
+            // Generate HTML for the translation pane
+            const translationHTML = buildHTMLTranscript(translationParagraphs, []);
+            document.getElementById('translated-text').innerHTML = translationHTML;
+          } else {
+            // No diarization - append plain text
+            document.getElementById('translated-text').textContent += " " + translation;
+          }
+          
+          translations.push(translation);
+          if (translations.length > 10) translations.shift();
+        }
+      } catch (error) {
+        console.error('[Recording] Translation error:', error);
+        updateTranslationStatus(`Translation Error: ${error.message}`, true);
+      } finally {
+        isTranslating = false;
       }
     }
   }
 }
+
+// Export the translation function to window for direct access
+window.translateWithAI = translateWithAI;

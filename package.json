@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "build": "webpack --mode development",
-    "start": "npm run build && electron ."
+    "start": "npm run build && electron .",
+    "package-win": "electron-packager . realtime-translator --platform=win32 --arch=x64 --out=dist --overwrite"
   },
   "keywords": [],
   "author": "",
@@ -14,12 +15,13 @@
     "@deepgram/sdk": "^3.8.0",
     "@electron/remote": "^2.1.2",
     "@nut-tree-fork/nut-js": "^4.2.4",
-    "electron": "^32.1.2",
     "electron-store": "^10.0.1",
     "mobx": "^6.13.6",
     "mobx-react": "^9.2.0"
   },
   "devDependencies": {
+    "electron": "^32.1.2",
+    "electron-packager": "^17.1.2",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1"
   }

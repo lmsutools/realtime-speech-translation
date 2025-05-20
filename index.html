@@ -1,90 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Realtime Translator Pro</title>
-  <link rel="stylesheet" href="base.css">
-  <link rel="stylesheet" href="components.css">
-  <link rel="stylesheet" href="layout.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Realtime Translator Pro</title>
+    <link rel="stylesheet" href="base.css">
+    <link rel="stylesheet" href="components.css">
+    <link rel="stylesheet" href="layout.css">
 </head>
 <body>
-  <div class="top-bar">
-    <div class="app-logo">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-      <span>Realtime Translator</span>
-    </div>
-    <div class="controls">
-      <button id="start" class="mic-button">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg> Start
-      </button>
-      <button id="stop" class="mic-button" style="display: none;">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="16"></rect></svg> Stop
-      </button>
-      <button id="reset" class="action-button">Reset</button>
-      <select id="sourceLanguage" class="language-select"></select>
-      <div class="feature-toggles">
-        <button id="toggleTranslate" class="toggle-button">Translate</button>
-        <button id="toggleDiarize" class="toggle-button">Diarize</button>
-      </div>
-    </div>
-    <div class="secondary-controls">
-      <select id="pasteOption" class="minimal-select">
-        <option value="none">Paste</option>
-        <option value="source">To Source</option>
-        <option value="translated">To Translation</option>
-      </select>
-      <button id="typingAppButton" class="action-button">Typing</button>
-      <button id="settingsIcon" class="icon-button" aria-label="Settings">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      </button>
-    </div>
-  </div>
-  <div class="main-content">
-    <div class="pane source-pane">
-      <div class="pane-header source-header">
-        <div class="pane-title">Source Text</div>
-        <div class="pane-controls">
-          <span id="source-lang-display" class="lang-badge">Auto-detect</span>
+    <div class="top-bar">
+        <div class="app-logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg> <span>Realtime Translator</span>
         </div>
-      </div>
-      <div class="pane-content">
-        <p id="source-text" class="text-display"></p>
-      </div>
-    </div>
-    <div class="pane translated-pane">
-      <div class="pane-header translation-header">
-        <div class="pane-title">Translation</div>
-        <div class="pane-controls">
-          <select id="targetLanguage" class="target-lang-select"></select>
+        <div class="controls">
+            <button id="start" class="mic-button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg> Start
+            </button> 
+            <button id="stop" class="mic-button" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="6" y="4" width="12" height="16"></rect>
+                </svg> Stop
+            </button> 
+            <button id="reset" class="action-button">Reset</button> 
+            <select id="sourceLanguage" class="language-select"></select>
+            <div class="feature-toggles">
+                <button id="toggleTranslate" class="toggle-button">Translate</button> 
+                <button id="toggleDiarize" class="toggle-button">Diarize</button>
+            </div>
         </div>
-      </div>
-      <div class="pane-content">
-        <p id="translated-text" class="text-display"></p>
-      </div>
+        <div class="secondary-controls">
+            <select id="pasteOption" class="minimal-select">
+                <option value="none">Paste</option>
+                <option value="source">To Source</option>
+                <option value="translated">To Translation</option>
+            </select> 
+            <button id="typingAppButton" class="action-button">Typing</button> 
+            <button id="settingsIcon" class="icon-button" aria-label="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+        </div>
     </div>
-  </div>
-  <div class="settings-panel">
-    <div class="settings-header">
-      <h2>Settings</h2>
-      <button class="close-settings" aria-label="Close settings">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
+    <div class="main-content">
+        <div class="pane source-pane">
+            <div class="pane-header source-header">
+                <div class="pane-title">Source Text</div>
+                <div class="pane-controls">
+                    <span id="source-lang-display" class="lang-badge">Auto-detect</span>
+                </div>
+            </div>
+            <div class="pane-content">
+                <p id="source-text" class="text-display"></p>
+            </div>
+        </div>
+        <div class="pane translated-pane">
+            <div class="pane-header translation-header">
+                <div class="pane-title">Translation</div>
+                <div class="pane-controls">
+                    <select id="targetLanguage" class="target-lang-select"></select>
+                </div>
+            </div>
+            <div class="pane-content">
+                <p id="translated-text" class="text-display"></p>
+            </div>
+        </div>
     </div>
-    <div class="tab-buttons">
-      <button class="tab-button active" data-tab="general">General</button>
-      <button class="tab-button" data-tab="api">API Keys</button>
-      <button class="tab-button" data-tab="advanced">Advanced</button>
+    <div class="settings-panel">
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button class="close-settings" aria-label="Close settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="tab-buttons">
+            <button class="tab-button active" data-tab="general">General</button> 
+            <button class="tab-button" data-tab="api">API Keys</button> 
+            <button class="tab-button" data-tab="advanced">Advanced</button>
+        </div>
+        <div class="tab-content">
+            <div id="general" class="tab-pane active"></div>
+            <div id="api" class="tab-pane"></div>
+            <div id="advanced" class="tab-pane"></div>
+        </div>
     </div>
-    <div class="tab-content">
-      <div id="general" class="tab-pane active"></div>
-      <div id="api" class="tab-pane"></div>
-      <div id="advanced" class="tab-pane"></div>
-    </div>
-  </div>
-  <script src="dist/bundle.js"></script>
-  <script src="modules/settingsPane.js"></script>
-  <script src="modules/providerSettingsPane.js"></script>
-  <script src="modules/typingAppPane.js"></script>
+    
+    <!-- Load bridge scripts first -->
+    <script src="modules/appStateBridge.js"></script>
+
+    
+    <!-- Then load UI modules -->
+    <script src="modules/ui.js"></script>
+    <script src="modules/settingsPane.js"></script>
+    <script src="modules/providerSettingsPane.js"></script>
+    <script src="modules/typingAppPane.js"></script>
+    
+    <!-- Finally load the webpack bundle (which will connect to the bridges) -->
+    <script src="dist/bundle.js"></script>
 </body>
 </html>

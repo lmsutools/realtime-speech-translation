@@ -1,107 +1,159 @@
-import { ipcRenderer } from 'electron';
-import { appState } from '../stores/appState.js';
-
-let lastValidShortcut = "CommandOrControl+Shift+T";
-let isCapturing = false;
-
-export async function loadTypingAppSettings() {
-  const advancedPane = document.getElementById('advanced');
-  advancedPane.innerHTML = `
-    <h3>Typing App</h3>
-    <div class="setting-group">
-      <label for="typingAppShortcut">Global Shortcut:</label>
-      <input type="text" id="typingAppShortcut" placeholder="Click here, then press desired combo" readonly>
-      <p id="typingAppShortcutHint" style="color: gray; font-style: italic; display: none;">Press the desired key combination, or ESC to cancel.</p>
-    </div>
-    <div class="setting-group">
-      <label for="typingAppActiveWidth">Active Width (px):</label>
-      <input type="number" id="typingAppActiveWidth" min="200" max="800" value="400">
-    </div>
-    <div class="setting-group">
-      <label for="typingAppActiveHeight">Active Height (px):</label>
-      <input type="number" id="typingAppActiveHeight" min="100" max="600" value="200">
-    </div>
-  `;
-
-  const shortcutInput = document.getElementById('typingAppShortcut');
-  const hint = document.getElementById('typingAppShortcutHint');
-  const widthInput = document.getElementById('typingAppActiveWidth');
-  const heightInput = document.getElementById('typingAppActiveHeight');
-
-  lastValidShortcut = appState.typingAppGlobalShortcut;
-  shortcutInput.value = lastValidShortcut;
-  widthInput.value = appState.typingAppActiveWidth;
-  heightInput.value = appState.typingAppActiveHeight;
-
-  function buildShortcutString(e) {
-    const keys = [];
-    const isMac = process.platform === 'darwin';
-    if (e.ctrlKey && !isMac) keys.push('Ctrl');
-    if (e.metaKey && isMac) keys.push('Command');
-    if (e.altKey) keys.push('Alt');
-    if (e.shiftKey) keys.push('Shift');
-    if (e.key === 'Escape') return null;
-    if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') return null;
-    let mainKey = e.key;
-    if (mainKey.length === 1) mainKey = mainKey.toUpperCase();
-    if (mainKey === ' ') mainKey = 'Space';
-    keys.push(mainKey);
-    return keys.join('+');
-  }
-
-  function startCapture() {
-    if (isCapturing) return;
-    isCapturing = true;
-    hint.style.display = 'block';
-    shortcutInput.value = '';
-    ipcRenderer.send('unregister-global-shortcut');
-    document.addEventListener('keydown', handleKeydown);
-  }
-
-  function stopCapture() {
-    if (!isCapturing) return;
-    isCapturing = false;
-    hint.style.display = 'none';
-    document.removeEventListener('keydown', handleKeydown);
-  }
-
-  function handleKeydown(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === 'Escape') {
-      stopCapture();
-      shortcutInput.value = lastValidShortcut;
-      ipcRenderer.send('update-global-shortcut', lastValidShortcut);
-      return;
+(function() {
+    // Use the globally available electron
+    const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+    
+    // Get appState from the global window object
+    const appState = window.appState;
+    
+    async function loadTypingAppSettings() {
+        const advancedPane = document.getElementById('advanced');
+        
+        advancedPane.innerHTML = `
+            <div class="setting-group">
+                <label for="typingAppGlobalShortcut">Global Shortcut:</label>
+                <input type="text" id="typingAppGlobalShortcut" placeholder="e.g., CommandOrControl+Shift+T">
+                <small>Press the desired key combination and click Set</small>
+                <button id="setShortcutButton" class="small-button">Set</button>
+            </div>
+            <div class="setting-group">
+                <label for="typingAppActiveWidth">Typing App Active Width:</label>
+                <input type="number" id="typingAppActiveWidth" min="100" max="800" value="400">
+            </div>
+            <div class="setting-group">
+                <label for="typingAppActiveHeight">Typing App Active Height:</label>
+                <input type="number" id="typingAppActiveHeight" min="100" max="600" value="200">
+            </div>
+        `;
+        
+        const shortcutInput = document.getElementById('typingAppGlobalShortcut');
+        const widthInput = document.getElementById('typingAppActiveWidth');
+        const heightInput = document.getElementById('typingAppActiveHeight');
+        const setShortcutButton = document.getElementById('setShortcutButton');
+        
+        // Load saved values
+        const currentShortcut = await ipcRenderer.invoke('store-get', 'typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
+        const activeWidth = await ipcRenderer.invoke('store-get', 'typingAppActiveWidth', 400);
+        const activeHeight = await ipcRenderer.invoke('store-get', 'typingAppActiveHeight', 200);
+        
+        shortcutInput.value = currentShortcut;
+        widthInput.value = activeWidth;
+        heightInput.value = activeHeight;
+        
+        // Initialize keypress listener for shortcut input
+        let pressedKeys = [];
+        let lastKeyTimeout;
+        
+        shortcutInput.addEventListener('keydown', (event) => {
+            event.preventDefault();
+            
+            // Clear the timeout to reset the counter
+            if (lastKeyTimeout) {
+                clearTimeout(lastKeyTimeout);
+            }
+            
+            // Get the key that was pressed
+            const key = event.key;
+            
+            // Skip if it's a modifier key we already have
+            if (
+                (key === 'Control' && pressedKeys.includes('Control')) ||
+                (key === 'Shift' && pressedKeys.includes('Shift')) ||
+                (key === 'Alt' && pressedKeys.includes('Alt')) ||
+                (key === 'Meta' && pressedKeys.includes('Meta'))
+            ) {
+                return;
+            }
+            
+            // Add modifiers first
+            if (event.ctrlKey && !pressedKeys.includes('Control')) {
+                pressedKeys.push('Control');
+            }
+            if (event.shiftKey && !pressedKeys.includes('Shift')) {
+                pressedKeys.push('Shift');
+            }
+            if (event.altKey && !pressedKeys.includes('Alt')) {
+                pressedKeys.push('Alt');
+            }
+            if (event.metaKey && !pressedKeys.includes('Meta')) {
+                pressedKeys.push('Meta');
+            }
+            
+            // Add the main key if it's not a modifier
+            if (
+                key !== 'Control' && 
+                key !== 'Shift' && 
+                key !== 'Alt' && 
+                key !== 'Meta' && 
+                !pressedKeys.includes(key)
+            ) {
+                pressedKeys.push(key);
+            }
+            
+            // Format the shortcut string
+            let shortcutString = '';
+            
+            if (pressedKeys.includes('Control')) {
+                shortcutString += process.platform === 'darwin' ? 'Command+' : 'Control+';
+            }
+            if (pressedKeys.includes('Meta') && process.platform !== 'darwin') {
+                shortcutString += 'Super+';
+            }
+            if (pressedKeys.includes('Alt')) {
+                shortcutString += process.platform === 'darwin' ? 'Option+' : 'Alt+';
+            }
+            if (pressedKeys.includes('Shift')) {
+                shortcutString += 'Shift+';
+            }
+            
+            // Add the main key
+            const mainKey = pressedKeys.find(k => 
+                k !== 'Control' && k !== 'Shift' && k !== 'Alt' && k !== 'Meta'
+            );
+            
+            if (mainKey) {
+                shortcutString += mainKey.length === 1 ? mainKey.toUpperCase() : mainKey;
+            }
+            
+            shortcutInput.value = shortcutString;
+            
+            // Reset after a small timeout
+            lastKeyTimeout = setTimeout(() => {
+                pressedKeys = [];
+            }, 1500);
+        });
+        
+        // Button to set the shortcut
+        setShortcutButton.addEventListener('click', async () => {
+            const newShortcut = shortcutInput.value;
+            if (newShortcut) {
+                await ipcRenderer.invoke('store-set', 'typingAppGlobalShortcut', newShortcut);
+                ipcRenderer.send('update-global-shortcut', newShortcut);
+            }
+        });
+        
+        // Save dimensions when changed
+        widthInput.addEventListener('change', async () => {
+            const newWidth = parseInt(widthInput.value);
+            if (newWidth >= 100 && newWidth <= 800) {
+                await ipcRenderer.invoke('store-set', 'typingAppActiveWidth', newWidth);
+            }
+        });
+        
+        heightInput.addEventListener('change', async () => {
+            const newHeight = parseInt(heightInput.value);
+            if (newHeight >= 100 && newHeight <= 600) {
+                await ipcRenderer.invoke('store-set', 'typingAppActiveHeight', newHeight);
+            }
+        });
     }
-    const combo = buildShortcutString(e);
-    if (!combo) return;
-    stopCapture();
-    shortcutInput.value = combo;
-    lastValidShortcut = combo;
-    appState.setTypingAppGlobalShortcut(combo);
-    ipcRenderer.send('update-global-shortcut', combo);
-  }
-
-  shortcutInput.addEventListener('focus', startCapture);
-  shortcutInput.addEventListener('click', () => {
-    shortcutInput.focus();
-    startCapture();
-  });
-
-  widthInput.addEventListener('change', () => {
-    const newWidth = parseInt(widthInput.value);
-    appState.setTypingAppActiveWidth(newWidth);
-    ipcRenderer.invoke('store-set', 'typingAppActiveWidth', newWidth);
-  });
-
-  heightInput.addEventListener('change', () => {
-    const newHeight = parseInt(heightInput.value);
-    appState.setTypingAppActiveHeight(newHeight);
-    ipcRenderer.invoke('store-set', 'typingAppActiveHeight', newHeight);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  loadTypingAppSettings();
-});
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Initialize the typing app settings pane
+        await loadTypingAppSettings();
+    });
+    
+    // Export functions for external use
+    window.typingAppPane = {
+        loadTypingAppSettings
+    };
+})();
