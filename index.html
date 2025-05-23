@@ -23,14 +23,12 @@
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                     <line x1="12" y1="19" x2="12" y2="23"></line>
                     <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg> 
-                Start
+                </svg> Start
             </button> 
             <button id="stop" class="mic-button" style="display: none;">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="6" y="4" width="12" height="16"></rect>
-                </svg> 
-                Stop
+                </svg> Stop
             </button> 
             <button id="reset" class="action-button">Reset</button> 
             <select id="sourceLanguage" class="language-select"></select>
@@ -111,7 +109,7 @@
     <script src="modules/ui/autoScrollManager.js"></script>
     <script src="modules/ui/testingUtils.js"></script>
     <script src="modules/settingsPane.js"></script>
-    <script src="modules/providerSettingsPane.js"></script>
+    <script type="module" src="modules/providerSettingsPane/index.js"></script>
     <script src="modules/typingAppPane.js"></script>
     <script src="modules/scrollUtils.js"></script>
     <script src="dist/bundle.js"></script>
