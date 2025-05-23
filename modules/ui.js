@@ -6,7 +6,7 @@ const ipcRenderer = window.require ? window.require('electron').ipcRenderer : nu
 const appState = window.appState;
 
 // Define auto-scroll states
-window.sourceAutoScrollEnabled = true;
+window.sourceAutoScrollEnabled = true; 
 window.translatedAutoScrollEnabled = true;
 
 // Utility functions for store operations

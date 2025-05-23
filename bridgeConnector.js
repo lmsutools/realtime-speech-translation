@@ -1,5 +1,5 @@
 // This file connects the webpack bundle functions to the global window object
-import { startRecording, stopRecording, resetRecordingData, preserveCurrentContent } from './modules/recording.js';
+import { startRecording, stopRecording, resetRecordingData, preserveCurrentContent } from './modules/recording/index.js';
 import { appState } from './stores/appState.js';
 
 // Make sure window.recording exists
