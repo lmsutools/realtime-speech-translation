@@ -1,5 +1,3 @@
-import { scrollPaneToBottom } from '../scrollUtils.js';
-
 export class UIUpdater {
     static updateSourceText(content, preservedContent = "") {
         const sourceElement = document.getElementById('source-text');
@@ -7,7 +5,10 @@ export class UIUpdater {
             sourceElement.innerHTML = (preservedContent ? preservedContent + '<br>' : '') + content;
             
             if (window.sourceAutoScrollEnabled) {
-                scrollPaneToBottom('.source-pane');
+                // Use the global window function
+                if (window.scrollUtils && window.scrollUtils.scrollPaneToBottom) {
+                    window.scrollUtils.scrollPaneToBottom('.source-pane');
+                }
             }
         }
     }
@@ -22,7 +23,10 @@ export class UIUpdater {
             }
             
             if (window.translatedAutoScrollEnabled) {
-                scrollPaneToBottom('.translated-pane');
+                // Use the global window function
+                if (window.scrollUtils && window.scrollUtils.scrollPaneToBottom) {
+                    window.scrollUtils.scrollPaneToBottom('.translated-pane');
+                }
             }
         }
     }
