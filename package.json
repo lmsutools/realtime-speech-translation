@@ -1,15 +1,75 @@
 {
   "name": "realtime-translator",
   "version": "1.0.0",
-  "description": "",
+  "description": "Real-time transcription and translation application",
   "main": "main.js",
   "scripts": {
-    "build": "webpack --mode development",
-    "start": "npm run build && electron .",
-    "package-win": "electron-packager . realtime-translator --platform=win32 --arch=x64 --out=dist --overwrite"
+    "// DEVELOPMENT": "",
+    "dev:webpack": "webpack --mode development --watch",
+    "dev:electron": "electron .",
+    "start": "npm run build:prod && electron .",
+    "start-dev": "concurrently \"npm:dev:webpack\" \"wait-on ./build/bundle.js && npm:dev:electron\"",
+    "// BUILD & PACKAGE": "",
+    "build:prod": "webpack --mode production",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "npm run build:prod && electron-builder --win --x64",
+    "dist:portable": "npm run build:prod && electron-builder --win portable --x64",
+    "// UTILITIES": "",
+    "clean": "rimraf ./build ./dist ./node_modules/.cache bundle.js",
+    "rebuild-deps": "electron-builder install-app-deps"
   },
-  "keywords": [],
-  "author": "",
+  "build": {
+    "appId": "com.scribeflow.translator",
+    "productName": "ScribeFlow Translator",
+    "copyright": "Copyright © 2025 ScribeFlow",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "settings.html",
+      "modules/typing/typing-app.html",
+      "modules/settings/settings.html",
+      "*.css",
+      "assets/**/*",
+      "build/",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/app_icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "portable": {
+      "artifactName": "ScribeFlow-Translator-Portable-${version}-${arch}.exe",
+      "requestExecutionLevel": "user",
+      "splashImage": "assets/splash.bmp"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/@nut-tree-fork/nut-js/**/*"
+    ],
+    "compression": "normal",
+    "npmRebuild": false,
+    "removePackageScripts": true
+  },
+  "keywords": [
+    "transcription",
+    "translation",
+    "real-time",
+    "speech-to-text"
+  ],
+  "author": "ScribeFlow",
   "license": "ISC",
   "dependencies": {
     "@deepgram/sdk": "^3.8.0",
@@ -20,8 +80,11 @@
     "mobx-react": "^9.2.0"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "electron": "^32.1.2",
-    "electron-packager": "^17.1.2",
+    "electron-builder": "^25.1.8",
+    "rimraf": "^6.0.1",
+    "wait-on": "^7.2.0",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1"
   }

@@ -2,116 +2,207 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Recommended CSP for Electron -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Realtime Translator Pro</title>
-    <link rel="stylesheet" href="base.css">
-    <link rel="stylesheet" href="components.css">
-    <link rel="stylesheet" href="layout.css">
+    <title>ScribeFlow Translator</title>
+    <link rel="stylesheet" href="./base.css">
+    <link rel="stylesheet" href="./components.css">
+    <link rel="stylesheet" href="./layout.css">
+    <style>
+       body {
+           margin: 0;
+           padding: 20px;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+           min-height: 100vh;
+           color: white;
+       }
+       
+       .container {
+           max-width: 800px;
+           margin: 0 auto;
+           background: rgba(255, 255, 255, 0.1);
+           border-radius: 20px;
+           padding: 30px;
+           backdrop-filter: blur(10px);
+           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+       }
+       
+       h1 {
+           text-align: center;
+           margin-bottom: 30px;
+           font-size: 2.5em;
+           text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+       }
+       
+       .controls {
+           display: flex;
+           gap: 15px;
+           margin-bottom: 20px;
+           flex-wrap: wrap;
+           justify-content: center;
+       }
+       
+       button {
+           padding: 12px 24px;
+           border: none;
+           border-radius: 25px;
+           font-size: 16px;
+           font-weight: 600;
+           cursor: pointer;
+           transition: all 0.3s ease;
+           background: rgba(255, 255, 255, 0.2);
+           color: white;
+           backdrop-filter: blur(5px);
+       }
+       
+       button:hover {
+           background: rgba(255, 255, 255, 0.3);
+           transform: translateY(-2px);
+           box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+       }
+       
+       button:active {
+           transform: translateY(0);
+       }
+       
+       button:disabled {
+           opacity: 0.5;
+           cursor: not-allowed;
+           transform: none;
+       }
+       
+       .status {
+           text-align: center;
+           margin: 20px 0;
+           font-size: 18px;
+           font-weight: 500;
+       }
+       
+       .output-section {
+           margin-top: 30px;
+       }
+       
+       .output-box {
+           background: rgba(0, 0, 0, 0.2);
+           border-radius: 15px;
+           padding: 20px;
+           margin: 15px 0;
+           min-height: 100px;
+           border: 1px solid rgba(255, 255, 255, 0.1);
+       }
+       
+       .output-label {
+           font-weight: 600;
+           margin-bottom: 10px;
+           color: #ffd700; /* Gold color for labels */
+       }
+       
+       .output-text {
+           font-size: 16px;
+           line-height: 1.5;
+           word-wrap: break-word;
+       }
+       
+       .language-selector {
+           margin: 20px 0;
+           text-align: center;
+       }
+       
+       select {
+           padding: 10px 15px;
+           border-radius: 15px;
+           border: none;
+           background: rgba(255, 255, 255, 0.2);
+           color: white;
+           font-size: 16px;
+           backdrop-filter: blur(5px);
+           margin: 0 10px;
+       }
+       
+       select option {
+           background: #333; /* Darker background for options */
+           color: white;
+       }
+       
+       .recording-indicator {
+           display: none; /* Hidden by default */
+           width: 20px;
+           height: 20px;
+           background: #ff4444; /* Bright red for recording */
+           border-radius: 50%;
+           animation: pulse 1.5s infinite;
+           margin: 0 auto 20px; /* Centered above controls */
+       }
+       
+       .recording-indicator.active {
+           display: block; /* Show when active */
+       }
+       
+       @keyframes pulse {
+           0% { opacity: 1; transform: scale(1); }
+           50% { opacity: 0.7; transform: scale(1.1); }
+           100% { opacity: 1; transform: scale(1); }
+       }
+    </style>
 </head>
 <body>
-    <div class="top-bar">
-        <div class="app-logo">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg> 
-            <span>Realtime Translator</span>
-        </div>
+    <div class="container">
+        <h1>ScribeFlow Translator</h1>
+
+        <div class="recording-indicator" id="recordingIndicator"></div>
+
         <div class="controls">
-            <button id="start" class="mic-button">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg> Start
-            </button> 
-            <button id="stop" class="mic-button" style="display: none;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="6" y="4" width="12" height="16"></rect>
-                </svg> Stop
-            </button> 
-            <button id="reset" class="action-button">Reset</button> 
-            <select id="sourceLanguage" class="language-select"></select>
-            <div class="feature-toggles">
-                <button id="toggleTranslate" class="toggle-button">Translate</button> 
-                <button id="toggleDiarize" class="toggle-button">Diarize</button>
-            </div>
+            <button id="startBtn">Start Recording</button>
+            <button id="stopBtn" disabled>Stop Recording</button>
+            <button id="clearBtn">Clear</button>
         </div>
-        <div class="secondary-controls">
-            <select id="targetLanguage" class="target-lang-select">
+
+        <div class="language-selector">
+            <label for="sourceLanguage">From:</label>
+            <select id="sourceLanguage">
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
-                <option value="zh">Chinese Simplified</option>
-            </select> 
-            <select id="pasteOption" class="minimal-select">
-                <option value="none">Paste</option>
-                <option value="source">To Source</option>
-                <option value="translated">To Translation</option>
-            </select> 
-            <button id="typingAppButton" class="action-button">Typing</button> 
-            <button id="settingsIcon" class="icon-button" aria-label="Settings">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l-.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                </svg>
-            </button>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+            </select>
+            <label for="targetLanguage">To:</label>
+            <select id="targetLanguage">
+                <option value="es">Spanish</option>
+                <option value="en">English</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ru">Russian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+            </select>
         </div>
-    </div>
-    <div class="main-content">
-        <div class="pane source-pane">
-            <div class="pane-header">
-                <div class="pane-controls">
-                    <span id="source-lang-display" class="lang-badge">Auto-detect</span> 
-                    <button class="auto-scroll-toggle" data-pane="source">Auto-Scroll On</button>
-                </div>
+
+        <div class="status" id="status">Ready to record</div>
+
+        <div class="output-section">
+            <div class="output-box">
+                <div class="output-label">Original Text:</div>
+                <div class="output-text" id="transcription">Transcription will appear here...</div>
             </div>
-            <div class="pane-content">
-                <div id="source-text" class="text-content"></div>
-            </div>
-        </div>
-        <div class="pane translated-pane">
-            <div class="pane-header translation-header">
-                <div class="pane-controls">
-                    <span id="translated-lang-display" class="lang-badge">Target</span> 
-                    <button class="auto-scroll-toggle" data-pane="translated">Auto-Scroll On</button>
-                </div>
-            </div>
-            <div class="pane-content">
-                <div id="translated-text" class="text-content"></div>
+            <div class="output-box">
+                <div class="output-label">Translation:</div>
+                <div class="output-text" id="translation">Translation will appear here...</div>
             </div>
         </div>
     </div>
-    <div class="settings-panel">
-        <div class="settings-header">
-            <h2>Settings</h2>
-            <button class="close-settings" aria-label="Close settings">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-        </div>
-        <div class="tab-buttons">
-            <button class="tab-button active" data-tab="general">General</button> 
-            <button class="tab-button" data-tab="api">API Keys</button> 
-            <button class="tab-button" data-tab="advanced">Advanced</button>
-        </div>
-        <div class="tab-content">
-            <div id="general" class="tab-pane active"></div>
-            <div id="api" class="tab-pane"></div>
-            <div id="advanced" class="tab-pane"></div>
-        </div>
-    </div>
-    <script src="modules/appStateBridge.js"></script>
-    <script src="modules/ui/uiCore.js"></script>
-    <script src="modules/ui/languageManager.js"></script>
-    <script src="modules/ui/translationUI.js"></script>
-    <script src="modules/ui/autoScrollManager.js"></script>
-    <script src="modules/ui/testingUtils.js"></script>
-    <script src="modules/settingsPane.js"></script>
-    <script type="module" src="modules/providerSettingsPane/index.js"></script>
-    <script src="modules/typingAppPane.js"></script>
-    <script src="modules/scrollUtils.js"></script>
-    <script src="dist/bundle.js"></script>
+
+    <!-- Webpack bundle will be injected here by Webpack, or manually loaded -->
+    <script src="./build/bundle.js"></script>
 </body>
 </html>

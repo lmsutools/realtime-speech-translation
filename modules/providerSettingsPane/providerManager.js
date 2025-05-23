@@ -53,54 +53,169 @@ export class ProviderManager {
 
     async initializeProviders() {
         const defaultProviders = this.getDefaultProviders();
-        const storedProviders = await this.ipcRenderer.invoke('store-get', 'aiProviders', null);
+        
+        try {
+            const storedProviders = await this.ipcRenderer.invoke('store-get', 'aiProviders', null);
+            console.log('[ProviderManager] Retrieved stored providers:', storedProviders);
 
-        if (storedProviders) {
-            try {
-                this.translateAiProviders = JSON.parse(storedProviders);
-                defaultProviders.forEach(defaultProvider => {
-                    if (!this.translateAiProviders.some(provider => provider.id === defaultProvider.id)) {
-                        this.translateAiProviders.push(defaultProvider);
-                    }
-                });
-            } catch (e) {
-                console.error("Error parsing stored aiProviders, using defaults.");
+            if (storedProviders) {
+                try {
+                    this.translateAiProviders = JSON.parse(storedProviders);
+                    console.log('[ProviderManager] Parsed stored providers:', this.translateAiProviders.length);
+                    
+                    // Merge with defaults, ensuring all default providers exist
+                    defaultProviders.forEach(defaultProvider => {
+                        if (!this.translateAiProviders.some(provider => provider.id === defaultProvider.id)) {
+                            console.log('[ProviderManager] Adding missing default provider:', defaultProvider.name);
+                            this.translateAiProviders.push(defaultProvider);
+                        }
+                    });
+                } catch (e) {
+                    console.error("Error parsing stored aiProviders, using defaults:", e);
+                    this.translateAiProviders = defaultProviders;
+                }
+            } else {
+                console.log('[ProviderManager] No stored providers found, using defaults');
                 this.translateAiProviders = defaultProviders;
             }
-        } else {
+
+            // Save the updated providers list with enhanced error handling
+            const saveResult = await this.ipcRenderer.invoke('store-set', 'aiProviders', JSON.stringify(this.translateAiProviders));
+            if (!saveResult) {
+                console.warn('[ProviderManager] Failed to save providers to store');
+            } else {
+                // Verify the save worked
+                const verification = await this.ipcRenderer.invoke('store-get', 'aiProviders', null);
+                if (verification) {
+                    console.log('[ProviderManager] Providers saved and verified successfully');
+                } else {
+                    console.warn('[ProviderManager] Provider save verification failed');
+                }
+            }
+            
+        } catch (error) {
+            console.error('[ProviderManager] Error initializing providers:', error);
             this.translateAiProviders = defaultProviders;
         }
-
-        await this.ipcRenderer.invoke('store-set', 'aiProviders', JSON.stringify(this.translateAiProviders));
     }
 
     async saveCurrentProvider(providerData, uiManager) {
-        const apiKey = document.getElementById('providerApiKey').value;
-        
-        await this.ipcRenderer.invoke('store-set', providerData.apiKeySettingKey, apiKey);
+        try {
+            const apiKey = document.getElementById('providerApiKey').value;
+            
+            // Save API key with verification
+            const apiKeySaveResult = await this.ipcRenderer.invoke('store-set', providerData.apiKeySettingKey, apiKey);
+            if (!apiKeySaveResult) {
+                throw new Error('Failed to save API key to storage');
+            }
+            
+            // Verify API key was saved
+            const savedApiKey = await this.ipcRenderer.invoke('store-get', providerData.apiKeySettingKey, '');
+            if (savedApiKey !== apiKey) {
+                throw new Error('API key verification failed after save');
+            }
+            
+            console.log('[ProviderManager] API key saved and verified for provider:', providerData.name);
 
-        if (this.editingProviderId) {
-            const index = this.translateAiProviders.findIndex(p => p.id === this.editingProviderId);
-            if (index !== -1) this.translateAiProviders[index] = providerData;
-        } else {
-            this.translateAiProviders.push(providerData);
-        }
+            if (this.editingProviderId) {
+                const index = this.translateAiProviders.findIndex(p => p.id === this.editingProviderId);
+                if (index !== -1) {
+                    this.translateAiProviders[index] = providerData;
+                    console.log('[ProviderManager] Updated existing provider:', providerData.name);
+                } else {
+                    console.warn('[ProviderManager] Provider to edit not found, adding as new');
+                    this.translateAiProviders.push(providerData);
+                }
+            } else {
+                this.translateAiProviders.push(providerData);
+                console.log('[ProviderManager] Added new provider:', providerData.name);
+            }
 
-        uiManager.populateProviderList(this.translateAiProviders);
-        uiManager.hideProviderEditForm();
-        uiManager.populateDefaultAiProvidersDropdown(this.translateAiProviders);
+            // Save providers list with verification
+            const providersSaveResult = await this.ipcRenderer.invoke('store-set', 'aiProviders', JSON.stringify(this.translateAiProviders));
+            if (!providersSaveResult) {
+                throw new Error('Failed to save providers list to storage');
+            }
+            
+            // Verify providers list was saved
+            const savedProviders = await this.ipcRenderer.invoke('store-get', 'aiProviders', null);
+            if (!savedProviders) {
+                throw new Error('Providers list verification failed after save');
+            }
+            
+            console.log('[ProviderManager] Providers list saved and verified successfully');
 
-        const translateDefaultAiProviderSelect = document.getElementById('defaultAiProviderSelect');
-        if (translateDefaultAiProviderSelect) {
-            translateDefaultAiProviderSelect.value = providerData.id;
-            await uiManager.updateDefaultAiModelsDropdown(providerData.id, this.translateAiProviders);
+            uiManager.populateProviderList(this.translateAiProviders);
+            uiManager.hideProviderEditForm();
+            uiManager.populateDefaultAiProvidersDropdown(this.translateAiProviders);
+
+            const translateDefaultAiProviderSelect = document.getElementById('defaultAiProviderSelect');
+            if (translateDefaultAiProviderSelect) {
+                translateDefaultAiProviderSelect.value = providerData.id;
+                await uiManager.updateDefaultAiModelsDropdown(providerData.id, this.translateAiProviders);
+            }
+            
+        } catch (error) {
+            console.error('[ProviderManager] Error saving provider:', error);
+            
+            // Show user-friendly error message
+            const statusElement = document.getElementById('providerValidationStatus');
+            if (statusElement) {
+                statusElement.textContent = `Save failed: ${error.message}`;
+                statusElement.className = "validation-status error";
+            }
+            
+            throw error; // Re-throw so caller knows it failed
         }
     }
 
-    deleteProvider(providerId, uiManager) {
-        this.translateAiProviders = this.translateAiProviders.filter(provider => provider.id !== providerId);
-        uiManager.populateProviderList(this.translateAiProviders);
-        uiManager.populateDefaultAiProvidersDropdown(this.translateAiProviders);
+    async deleteProvider(providerId, uiManager) {
+        try {
+            // Remove from memory
+            const initialLength = this.translateAiProviders.length;
+            this.translateAiProviders = this.translateAiProviders.filter(provider => provider.id !== providerId);
+            
+            if (this.translateAiProviders.length === initialLength) {
+                console.warn('[ProviderManager] Provider to delete not found:', providerId);
+                return;
+            }
+            
+            console.log('[ProviderManager] Removed provider from memory:', providerId);
+            
+            // Save updated list with verification
+            const saveResult = await this.ipcRenderer.invoke('store-set', 'aiProviders', JSON.stringify(this.translateAiProviders));
+            if (!saveResult) {
+                throw new Error('Failed to save updated providers list');
+            }
+            
+            // Verify the save
+            const verification = await this.ipcRenderer.invoke('store-get', 'aiProviders', null);
+            if (!verification) {
+                throw new Error('Provider deletion verification failed');
+            }
+            
+            console.log('[ProviderManager] Provider deletion saved and verified');
+            
+            // Also try to remove the API key for this provider
+            const provider = this.getDefaultProviders().find(p => p.id === providerId);
+            if (provider) {
+                await this.ipcRenderer.invoke('store-delete', provider.apiKeySettingKey);
+                console.log('[ProviderManager] Deleted API key for provider:', providerId);
+            }
+            
+            uiManager.populateProviderList(this.translateAiProviders);
+            uiManager.populateDefaultAiProvidersDropdown(this.translateAiProviders);
+            
+        } catch (error) {
+            console.error('[ProviderManager] Error deleting provider:', error);
+            
+            // Show user-friendly error message
+            const statusElement = document.getElementById('providerValidationStatus');
+            if (statusElement) {
+                statusElement.textContent = `Delete failed: ${error.message}`;
+                statusElement.className = "validation-status error";
+            }
+        }
     }
 
     getProviderById(providerId) {
@@ -117,5 +232,46 @@ export class ProviderManager {
 
     clearEditingProviderId() {
         this.editingProviderId = null;
+    }
+
+    async verifyStorePersistence() {
+        try {
+            // Test basic store functionality
+            const testKey = 'providerManager_test_' + Date.now();
+            const testValue = 'test_value_' + Math.random();
+            
+            const saveResult = await this.ipcRenderer.invoke('store-set', testKey, testValue);
+            if (!saveResult) {
+                throw new Error('Store set operation failed');
+            }
+            
+            const retrievedValue = await this.ipcRenderer.invoke('store-get', testKey, null);
+            if (retrievedValue !== testValue) {
+                throw new Error('Store get operation failed or returned wrong value');
+            }
+            
+            const deleteResult = await this.ipcRenderer.invoke('store-delete', testKey);
+            if (!deleteResult) {
+                console.warn('[ProviderManager] Store delete test failed (non-critical)');
+            }
+            
+            console.log('[ProviderManager] Store persistence test passed');
+            return true;
+            
+        } catch (error) {
+            console.error('[ProviderManager] Store persistence test failed:', error);
+            return false;
+        }
+    }
+
+    async getStoreInfo() {
+        try {
+            const info = await this.ipcRenderer.invoke('store-info');
+            console.log('[ProviderManager] Store info:', info);
+            return info;
+        } catch (error) {
+            console.error('[ProviderManager] Error getting store info:', error);
+            return { available: false, error: error.message };
+        }
     }
 }
