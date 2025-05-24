@@ -6630,7 +6630,7 @@ class uiUpdater_UIUpdater {
 }
 
 // EXTERNAL MODULE: ./modules/translation.js
-var modules_translation = __webpack_require__(804);
+var translation = __webpack_require__(804);
 ;// ./modules/utils.js
 const utils_electronAPI = window.electronAPI;
 
@@ -6651,165 +6651,190 @@ async function pasteText(text) {
 
 
 
-
+ // MobX appState
 
 class TranslationHandler {
+
     static extractCurrentSpeakerId() {
         if (recordingState_recordingState.finalParagraphs.length > 0) {
             return recordingState_recordingState.finalParagraphs[recordingState_recordingState.finalParagraphs.length - 1].speaker;
         }
-
-        const sourceText = document.getElementById('source-text');
-        if (sourceText) {
-            const speakerMatch = /speaker\s+(\d+)/i.exec(sourceText.innerHTML);
-            if (speakerMatch && speakerMatch[1]) {
-                return parseInt(speakerMatch[1]);
+        // Fallback logic if needed, though ideally finalParagraphs should be up-to-date
+        const sourceTextElement = document.getElementById('source-text');
+        if (sourceTextElement) {
+            const speakerSpans = sourceTextElement.querySelectorAll('span[style*="background-color"]');
+            if (speakerSpans.length > 0) {
+                const lastSpeakerSpan = speakerSpans[speakerSpans.length - 1];
+                const speakerMatch = /speaker\s+(\d+)/i.exec(lastSpeakerSpan.textContent);
+                if (speakerMatch && speakerMatch[1]) {
+                    return parseInt(speakerMatch[1]);
+                }
             }
         }
-
-        return 0;
+        return 0; // Default speaker
     }
 
-    static async handleTranslationAndPasting(transcript, isFinal, sourceParagraphs = []) {
+    static async handleFinalTranscriptSegment(transcript) {
         if (!transcript.trim()) {
-            console.log('[TranslationHandler] Empty transcript, skipping');
+            console.log('[TranslationHandler] Empty transcript segment, skipping.');
             return;
         }
 
-        if (!isFinal) {
-            console.log('[TranslationHandler] Not a final transcript, skipping');
-            return;
+        console.log(`[TranslationHandler] Processing final transcript segment: "${transcript}"`);
+        recordingState_recordingState.transcriptions.push(transcript);
+        if (recordingState_recordingState.transcriptions.length > 10) {
+            recordingState_recordingState.transcriptions.shift();
         }
 
-        const pasteOption = document.getElementById('pasteOption').value;
-        const translationEnabled = appState.appState.enableTranslation;
+        let currentTranslation = null;
 
-        console.log(`[TranslationHandler] Handling transcript: "${transcript}"`);
-        console.log(`[TranslationHandler] Options: pasteOption=${pasteOption}, translationEnabled=${translationEnabled}, typingActive=${recordingState_recordingState.typingActive}`);
+        // --- Translation Display Logic (Independent of Typing/Pasting) ---
+        if (appState.appState.enableTranslation) {
+            if (recordingState_recordingState.isTranslating) {
+                console.log('[TranslationHandler] Translation already in progress for a previous segment, skipping new translation for this one.');
+            } else {
+                const configValid = await (0,translation.validateTranslationConfig)();
+                if (!configValid.valid) {
+                    console.error('[TranslationHandler] Translation config invalid:', configValid.message);
+                    uiUpdater_UIUpdater.updateTranslationStatus(configValid.message, true);
+                    // Optionally update the UI to show the source text in the translation pane as a fallback
+                    // this.updateTranslationUIWithSource(transcript); 
+                } else {
+                    try {
+                        recordingState_recordingState.isTranslating = true;
+                        uiUpdater_UIUpdater.updateTranslationStatus("Translating...");
+                        console.log('[TranslationHandler] Starting translation process for UI display...');
+                        
+                        currentTranslation = await (0,translation/* translateWithAI */.z)(
+                            transcript,
+                            recordingState_recordingState.transcriptions.join(' '), // Context
+                            recordingState_recordingState.translations.join(' ')    // Previous translations
+                        );
+                        console.log(`[TranslationHandler] Translation result for UI: "${currentTranslation}"`);
 
-        if (recordingState_recordingState.typingActive) {
-            if (pasteOption === 'source') {
-                console.log(`[TranslationHandler] Pasting source text: "${transcript}"`);
-                await pasteText(transcript);
-            } else if (pasteOption === 'translated' && translationEnabled) {
-                await this.handleTypingTranslation(transcript);
+                        if (currentTranslation.startsWith("Translation Error:")) {
+                            console.error(`[TranslationHandler] Translation for UI failed: "${currentTranslation}"`);
+                            uiUpdater_UIUpdater.updateTranslationStatus(currentTranslation, true);
+                            // this.updateTranslationUIWithSource(transcript); // Fallback display
+                        } else {
+                            console.log(`[TranslationHandler] Translation for UI succeeded: "${currentTranslation}"`);
+                            await this.updateMainTranslationUI(currentTranslation); // Update main window's translation pane
+                            recordingState_recordingState.translations.push(currentTranslation);
+                            if (recordingState_recordingState.translations.length > 10) {
+                                recordingState_recordingState.translations.shift();
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[TranslationHandler] Error during UI translation:', error);
+                        uiUpdater_UIUpdater.updateTranslationStatus(`Translation Error: ${error.message}`, true);
+                        // this.updateTranslationUIWithSource(transcript); // Fallback display
+                    } finally {
+                        recordingState_recordingState.isTranslating = false;
+                    }
+                }
             }
         } else {
-            if (pasteOption === 'translated' && translationEnabled) {
-                await this.handleNonTypingTranslation(transcript);
-            }
-        }
-    }
-
-    static async handleTypingTranslation(transcript) {
-        console.log(`[TranslationHandler] Translation requested for: "${transcript}"`);
-        
-        if (recordingState_recordingState.isTranslating) {
-            console.log('[TranslationHandler] Translation already in progress, skipping');
-            return;
+            // If translation is not enabled, ensure the translation pane is clear or shows a message
+            // UIUpdater.updateTranslatedText(''); // Or a placeholder like "Translation disabled"
         }
 
-        const configValid = await (0,modules_translation.validateTranslationConfig)();
-        if (!configValid.valid) {
-            console.error('[TranslationHandler] Translation config invalid:', configValid.message);
-            uiUpdater_UIUpdater.updateTranslationStatus(configValid.message, true);
-            await pasteText(transcript);
-            return;
-        }
+        // --- Typing/Pasting Logic (For Typing App) ---
+        if (recordingState_recordingState.typingActive) {
+            const pasteOption = document.getElementById('pasteOption').value;
+            console.log(`[TranslationHandler] Typing App active. Paste option: "${pasteOption}"`);
 
-        try {
-            recordingState_recordingState.isTranslating = true;
-            uiUpdater_UIUpdater.updateTranslationStatus("Translating...");
-            console.log('[TranslationHandler] Starting translation process...');
-
-            const translation = await (0,modules_translation/* translateWithAI */.z)(
-                transcript, 
-                recordingState_recordingState.transcriptions.join(' '), 
-                recordingState_recordingState.translations.join(' ')
-            );
-
-            console.log(`[TranslationHandler] Translation result: "${translation}"`);
-
-            if (translation.startsWith("Translation Error:")) {
-                console.error(`[TranslationHandler] Translation failed: "${translation}"`);
-                uiUpdater_UIUpdater.updateTranslationStatus(translation, true);
+            if (pasteOption === 'source') {
+                console.log(`[TranslationHandler] Typing source text: "${transcript}"`);
                 await pasteText(transcript);
-            } else {
-                console.log(`[TranslationHandler] Translation succeeded: "${translation}"`);
-                await this.updateTranslationUI(translation);
-                recordingState_recordingState.translations.push(translation);
-                if (recordingState_recordingState.translations.length > 10) recordingState_recordingState.translations.shift();
-                await pasteText(translation);
+            } else if (pasteOption === 'translated') {
+                if (appState.appState.enableTranslation) {
+                    if (currentTranslation && !currentTranslation.startsWith("Translation Error:")) {
+                        // Use the translation we just got for the UI
+                        console.log(`[TranslationHandler] Typing translated text (already available): "${currentTranslation}"`);
+                        await pasteText(currentTranslation);
+                    } else if (!recordingState_recordingState.isTranslating) { 
+                        // If UI translation wasn't running or failed, and we need to translate specifically for typing
+                        console.log('[TranslationHandler] Translation needed specifically for typing. Re-validating config...');
+                        const configValidForTyping = await (0,translation.validateTranslationConfig)();
+                        if (!configValidForTyping.valid) {
+                            console.error('[TranslationHandler] Typing translation config invalid:', configValidForTyping.message);
+                            uiUpdater_UIUpdater.updateTranslationStatus(`Typing Error: ${configValidForTyping.message}`, true);
+                            console.log(`[TranslationHandler] Fallback: Typing source text due to translation config error: "${transcript}"`);
+                            await pasteText(transcript); // Fallback to source
+                        } else {
+                            try {
+                                // Avoid setting global isTranslating flag here if it's a separate attempt
+                                uiUpdater_UIUpdater.updateTranslationStatus("Translating for typing..."); // Temporary status
+                                const translationForTyping = await (0,translation/* translateWithAI */.z)(
+                                    transcript,
+                                    recordingState_recordingState.transcriptions.join(' '),
+                                    recordingState_recordingState.translations.join(' ')
+                                );
+                                if (translationForTyping.startsWith("Translation Error:")) {
+                                    console.error(`[TranslationHandler] Typing translation failed: "${translationForTyping}"`);
+                                    uiUpdater_UIUpdater.updateTranslationStatus(translationForTyping, true);
+                                    console.log(`[TranslationHandler] Fallback: Typing source text due to translation error: "${transcript}"`);
+                                    await pasteText(transcript); // Fallback to source
+                                } else {
+                                    console.log(`[TranslationHandler] Typing translated text (newly fetched): "${translationForTyping}"`);
+                                    await pasteText(translationForTyping);
+                                }
+                            } catch (error) {
+                                console.error('[TranslationHandler] Error during typing-specific translation:', error);
+                                uiUpdater_UIUpdater.updateTranslationStatus(`Typing Translation Error: ${error.message}`, true);
+                                console.log(`[TranslationHandler] Fallback: Typing source text due to translation exception: "${transcript}"`);
+                                await pasteText(transcript); // Fallback to source
+                            }
+                        }
+                    } else {
+                         console.log('[TranslationHandler] Translation for UI is in progress or failed, fallback to typing source for now.');
+                         await pasteText(transcript); // Fallback while UI translation is busy or failed
+                    }
+                } else {
+                    console.log('[TranslationHandler] Translation not enabled, typing source text instead for "Type the Translation" option.');
+                    await pasteText(transcript); // Fallback to source if translation isn't enabled
+                }
+            } else if (pasteOption === 'none') {
+                console.log('[TranslationHandler] Typing App active, but "No Typing" selected.');
             }
-        } catch (error) {
-            console.error('[TranslationHandler] Translation error:', error);
-            uiUpdater_UIUpdater.updateTranslationStatus(`Translation Error: ${error.message}`, true);
-            await pasteText(transcript);
-        } finally {
-            recordingState_recordingState.isTranslating = false;
         }
     }
-
-    static async handleNonTypingTranslation(transcript) {
-        console.log(`[TranslationHandler] Translating (no typing): "${transcript}"`);
-        
-        if (recordingState_recordingState.isTranslating) {
-            console.log('[TranslationHandler] Translation already in progress, skipping');
-            return;
-        }
-
-        const configValid = await (0,modules_translation.validateTranslationConfig)();
-        if (!configValid.valid) {
-            console.error('[TranslationHandler] Translation config invalid:', configValid.message);
-            uiUpdater_UIUpdater.updateTranslationStatus(configValid.message, true);
-            return;
-        }
-
-        try {
-            recordingState_recordingState.isTranslating = true;
-            uiUpdater_UIUpdater.updateTranslationStatus("Translating...");
-            console.log('[TranslationHandler] Starting translation process...');
-
-            const translation = await (0,modules_translation/* translateWithAI */.z)(
-                transcript, 
-                recordingState_recordingState.transcriptions.join(' '), 
-                recordingState_recordingState.translations.join(' ')
-            );
-
-            console.log(`[TranslationHandler] Translation result: "${translation}"`);
-
-            if (translation.startsWith("Translation Error:")) {
-                console.error(`[TranslationHandler] Translation failed: "${translation}"`);
-                uiUpdater_UIUpdater.updateTranslationStatus(translation, true);
-            } else {
-                console.log(`[TranslationHandler] Translation succeeded: "${translation}"`);
-                await this.updateTranslationUI(translation);
-                recordingState_recordingState.translations.push(translation);
-                if (recordingState_recordingState.translations.length > 10) recordingState_recordingState.translations.shift();
-            }
-        } catch (error) {
-            console.error('[TranslationHandler] Translation error:', error);
-            uiUpdater_UIUpdater.updateTranslationStatus(`Translation Error: ${error.message}`, true);
-        } finally {
-            recordingState_recordingState.isTranslating = false;
-        }
-    }
-
-    static async updateTranslationUI(translation) {
+    
+    // Helper to update the main UI's translation pane
+    static async updateMainTranslationUI(translatedTextSegment) {
         if (appState.appState.diarizationEnabled) {
             const speakerId = this.extractCurrentSpeakerId();
             const translatedParagraph = {
                 speaker: speakerId,
-                text: translation,
-                endTime: 0,
-                sentenceCount: (0,paragraphBuilder.countSentenceEnders)(translation)
+                text: translatedTextSegment,
+                endTime: 0, // Not strictly necessary for display only
+                sentenceCount: (0,paragraphBuilder.countSentenceEnders)(translatedTextSegment)
             };
-
+            // Append to a list of paragraphs for the translation pane
             recordingState_recordingState.translationParagraphs.push(translatedParagraph);
             const translationHTML = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.translationParagraphs, []);
-            uiUpdater_UIUpdater.updateTranslatedText(translationHTML);
+            uiUpdater_UIUpdater.updateTranslatedText(translationHTML, false); // Replace content
         } else {
-            uiUpdater_UIUpdater.updateTranslatedText(translation, true);
+            // Append plain text for non-diarized translations
+            uiUpdater_UIUpdater.updateTranslatedText(translatedTextSegment, true); // Append content
+        }
+    }
+
+    // Optional: Helper if you want to show source in translation pane on error
+    static updateTranslationUIWithSource(sourceTranscriptSegment) {
+        if (appState.appState.diarizationEnabled) {
+            const speakerId = this.extractCurrentSpeakerId();
+            const sourceAsTranslatedParagraph = {
+                speaker: speakerId,
+                text: `(Source as fallback): ${sourceTranscriptSegment}`,
+                endTime: 0,
+                sentenceCount: (0,paragraphBuilder.countSentenceEnders)(sourceTranscriptSegment)
+            };
+            recordingState_recordingState.translationParagraphs.push(sourceAsTranslatedParagraph);
+            const translationHTML = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.translationParagraphs, []);
+            uiUpdater_UIUpdater.updateTranslatedText(translationHTML, false);
+        } else {
+            uiUpdater_UIUpdater.updateTranslatedText(`(Source as fallback): ${sourceTranscriptSegment}`, true);
         }
     }
 }
@@ -6851,7 +6876,7 @@ class IPCHandler {
 
 
 
-
+ // Make sure this path is correct
 
 
 
@@ -6859,79 +6884,77 @@ class TranscriptProcessor {
     static async processMessage(parsed) {
         const alt = parsed?.channel?.alternatives[0];
         if (!alt) return;
-        
+
+        recordingState_recordingState.deepgramCaptions.push(parsed); // Store raw response
+
         const words = alt.words || [];
         const plainTranscript = alt.transcript || "";
-        
+
         if (appState.appState.diarizationEnabled) {
             await this.processDiarizedTranscript(parsed, words, plainTranscript);
         } else {
             await this.processNonDiarizedTranscript(parsed, plainTranscript);
         }
     }
-    
+
     static async processDiarizedTranscript(parsed, words, plainTranscript) {
         (0,paragraphBuilder.syncEphemeralWords)(recordingState_recordingState.ephemeralWords, words);
-        
+
         if (!parsed.is_final) {
             const ephemeralParagraphs = (0,paragraphBuilder.buildParagraphsFromWords)([...recordingState_recordingState.ephemeralWords.values()]);
             const newContent = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.finalParagraphs, ephemeralParagraphs);
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
             
-            const plainText = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, ephemeralParagraphs);
-            IPCHandler.sendTranscriptUpdated(plainText);
+            const plainTextForTypingApp = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, ephemeralParagraphs);
+            IPCHandler.sendTranscriptUpdated(plainTextForTypingApp);
         } else {
             const ephemeralParagraphs = (0,paragraphBuilder.buildParagraphsFromWords)([...recordingState_recordingState.ephemeralWords.values()]);
             recordingState_recordingState.finalParagraphs.push(...ephemeralParagraphs);
             recordingState_recordingState.ephemeralWords.clear();
+
+            const finalHtmlContent = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.finalParagraphs, []);
+            uiUpdater_UIUpdater.updateSourceText(finalHtmlContent, recordingState_recordingState.preservedContent);
             
-            const newContent = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.finalParagraphs, []);
-            uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
+            const finalTextForTypingApp = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, []);
+            IPCHandler.sendTranscriptUpdated(finalTextForTypingApp);
             
-            const plainText = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, []);
-            IPCHandler.sendTranscriptUpdated(plainText);
-            
-            recordingState_recordingState.transcriptions.push(plainTranscript);
-            if (recordingState_recordingState.transcriptions.length > 10) recordingState_recordingState.transcriptions.shift();
-            
-            await TranslationHandler.handleTranslationAndPasting(plainTranscript, true, ephemeralParagraphs);
+            // This is the plain text of the current final segment for translation/pasting
+            const currentFinalSegmentText = convertParagraphsToText(ephemeralParagraphs); 
+            await TranslationHandler.handleFinalTranscriptSegment(currentFinalSegmentText);
             
             console.log('[TranscriptProcessor] All Deepgram Responses:', recordingState_recordingState.deepgramCaptions);
         }
     }
-    
+
     static async processNonDiarizedTranscript(parsed, plainTranscript) {
-        const alt = parsed?.channel?.alternatives[0];
-        if (!alt) return;
-        
-        const transcript = alt.transcript || "";
-        if (!transcript.trim()) return;
-        
+        if (!plainTranscript.trim() && !parsed.is_final) return; // Allow empty final to finalize previous
+
         if (parsed.is_final) {
-            recordingState_recordingState.finalTranscription += " " + transcript;
-            const newContent = recordingState_recordingState.finalTranscription
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
+            // The 'plainTranscript' here is the final segment from Deepgram for this message
+            const currentFinalSegmentText = plainTranscript.trim();
+            recordingState_recordingState.finalTranscription += (recordingState_recordingState.finalTranscription ? " " : "") + currentFinalSegmentText;
             
+            const newContent = recordingState_recordingState.finalTranscription.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
             
-            recordingState_recordingState.transcriptions.push(transcript);
-            if (recordingState_recordingState.transcriptions.length > 10) recordingState_recordingState.transcriptions.shift();
-            
-            await TranslationHandler.handleTranslationAndPasting(transcript, true);
-            IPCHandler.sendTranscriptUpdated(recordingState_recordingState.finalTranscription);
+            IPCHandler.sendTranscriptUpdated(recordingState_recordingState.finalTranscription); // Send the whole thing to typing app
+
+            if (currentFinalSegmentText) { // Only process if there's actual text in this segment
+                 await TranslationHandler.handleFinalTranscriptSegment(currentFinalSegmentText);
+            }
         } else {
-            const interimText = recordingState_recordingState.finalTranscription + " " + transcript;
-            const newContent = interimText
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-            
+            // Interim transcript for non-diarized
+            const interimText = recordingState_recordingState.finalTranscription + (recordingState_recordingState.finalTranscription ? " " : "") + plainTranscript;
+            const newContent = interimText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
-            IPCHandler.sendTranscriptUpdated(interimText);
+            IPCHandler.sendTranscriptUpdated(interimText); // Send interim to typing app
         }
     }
+}
+
+// Helper function that might be in paragraphBuilder.js or here
+function convertParagraphsToText(paragraphs) {
+    return paragraphs.map(p => p.text.trim()).join(' ');
 }
 
 // EXTERNAL MODULE: ./node_modules/mobx/dist/mobx.esm.js
@@ -7086,7 +7109,7 @@ function preserveCurrentContent() {
 }
 
 // Export the translation function to window for direct access
-window.translateWithAI = modules_translation/* translateWithAI */.z;
+window.translateWithAI = translation/* translateWithAI */.z;
 ;// ./bridgeConnector.js
 // This file connects the webpack bundle functions to the global window object
 

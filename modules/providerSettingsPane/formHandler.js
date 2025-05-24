@@ -1,6 +1,6 @@
 export class FormHandler {
     constructor() {
-        this.ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+        this.electronAPI = window.electronAPI; // Use electronAPI from preload
     }
 
     setupProviderFormListeners(providerManager, uiManager) {
@@ -42,15 +42,18 @@ export class FormHandler {
         const providerListDiv = document.getElementById('providerList');
         if (providerListDiv) {
             providerListDiv.addEventListener('click', (event) => {
-                if (event.target.classList.contains('edit-provider')) {
-                    const providerId = event.target.dataset.id;
+                const target = event.target;
+                if (target.classList.contains('edit-provider')) {
+                    const providerId = target.dataset.id;
                     const providerToEdit = providerManager.getProviderById(providerId);
                     if (providerToEdit) {
                         uiManager.showProviderEditForm(providerToEdit, providerManager);
                     }
-                } else if (event.target.classList.contains('delete-provider')) {
-                    const providerId = event.target.dataset.id;
-                    providerManager.deleteProvider(providerId, uiManager);
+                } else if (target.classList.contains('delete-provider')) {
+                    const providerId = target.dataset.id;
+                    if (confirm(`Are you sure you want to delete provider with ID: ${providerId}? This cannot be undone.`)) {
+                        providerManager.deleteProvider(providerId, uiManager);
+                    }
                 }
             });
         }
@@ -58,34 +61,34 @@ export class FormHandler {
 
     async saveCurrentProvider(providerManager, uiManager) {
         const providerNameInput = document.getElementById('providerName');
-        const providerApiKeyInput = document.getElementById('providerApiKey');
+        const providerApiKeyInput = document.getElementById('providerApiKey'); // This is read by ProviderManager
         const providerModelsTextarea = document.getElementById('providerModels');
         const providerEndpointInput = document.getElementById('providerEndpoint');
         const translateDefaultAiModelSelect = document.getElementById('defaultAiModelSelect');
 
-        if (!providerNameInput || !providerApiKeyInput || !providerModelsTextarea ||
-            !providerEndpointInput || !translateDefaultAiModelSelect) return;
+        if (!providerNameInput || !providerModelsTextarea || !providerEndpointInput || !translateDefaultAiModelSelect) {
+            console.error("[FormHandler] One or more form elements not found for saving provider.");
+            return;
+        }
 
         const editingProviderId = providerManager.getEditingProviderId();
         const providerId = editingProviderId || providerManager.generateUniqueId();
-
+        
         const providerData = {
             id: providerId,
             name: providerNameInput.value,
             models: providerModelsTextarea.value.split(',').map(m => m.trim()).filter(m => m),
             endpoint: providerEndpointInput.value,
-            apiKeySettingKey: editingProviderId ?
-                providerManager.getApiKeyStorageKey(editingProviderId) :
-                providerManager.getApiKeyStorageKey(providerId),
+            apiKeySettingKey: editingProviderId ? providerManager.getApiKeyStorageKey(editingProviderId) : providerManager.getApiKeyStorageKey(providerId),
             defaultModel: translateDefaultAiModelSelect.value
         };
 
-        await providerManager.saveCurrentProvider(providerData, uiManager);
-        providerManager.clearEditingProviderId();
-
-        // Trigger save of provider settings
-        if (window.providerSettingsPane && window.providerSettingsPane.saveProviderSettings) {
-            await window.providerSettingsPane.saveProviderSettings();
+        try {
+            await providerManager.saveCurrentProvider(providerData, uiManager);
+            providerManager.clearEditingProviderId(); // Clear after successful save
+        } catch (error) {
+            console.error("[FormHandler] Error during saveCurrentProvider in ProviderManager:", error);
+            // Error display is handled within ProviderManager or UIManager
         }
     }
 }
