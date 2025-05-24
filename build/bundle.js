@@ -178,9 +178,7 @@ function convertParagraphsToText(paragraphs) {
 /* harmony export */   validateTranslationConfig: () => (/* binding */ validateTranslationConfig),
 /* harmony export */   z: () => (/* binding */ translateWithAI)
 /* harmony export */ });
-/* harmony import */ var electron__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(482);
-/* harmony import */ var electron__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(electron__WEBPACK_IMPORTED_MODULE_0__);
-
+const electronAPI = window.electronAPI;
 
 /**
  * Validate translation configuration
@@ -195,15 +193,15 @@ async function validateTranslationConfig() {
                 message: "No AI providers configured. Please set up an AI provider in settings."
             };
         }
-
-        const defaultProviderId = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', 'translateDefaultAiProvider', '');
+        
+        const defaultProviderId = await electronAPI.invoke('store-get', 'translateDefaultAiProvider', '');
         if (!defaultProviderId) {
             return {
                 valid: false,
                 message: "No default AI provider selected. Please select a default provider in settings."
             };
         }
-
+        
         const provider = aiProviders.find(p => p.id === defaultProviderId);
         if (!provider) {
             return {
@@ -211,15 +209,15 @@ async function validateTranslationConfig() {
                 message: `Selected provider '${defaultProviderId}' not found. Please check your settings.`
             };
         }
-
-        const apiKey = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', provider.apiKeySettingKey, '');
+        
+        const apiKey = await electronAPI.invoke('store-get', provider.apiKeySettingKey, '');
         if (!apiKey) {
             return {
                 valid: false,
                 message: `API key for ${provider.name} is not set. Please add it in the API Keys settings.`
             };
         }
-
+        
         return { valid: true };
     } catch (error) {
         console.error('[Translation] Config validation error:', error);
@@ -234,8 +232,9 @@ async function validateTranslationConfig() {
  * Get AI providers
  */
 async function getAIProviders() {
-    const storedProviders = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', 'aiProviders', null);
+    const storedProviders = await electronAPI.invoke('store-get', 'aiProviders', null);
     if (!storedProviders) return [];
+    
     try {
         return JSON.parse(storedProviders);
     } catch (e) {
@@ -255,7 +254,9 @@ If there are multiple speakers, preserve the speaker shifts in your translation.
 Respond ONLY with the translation, nothing else.`,
         messages: [{
             role: "user",
-            content: `Translate this text to ${targetLanguage}: "${text}"${context ? `\nContext (previous sentences for reference): ${context}` : ''}${previousTranslations ? `\nPrevious translations: ${previousTranslations}` : ''}`
+            content: `Translate this text to ${targetLanguage}: "${text}"
+${context ? `\nContext (previous sentences for reference): ${context}` : ''}
+${previousTranslations ? `\nPrevious translations: ${previousTranslations}` : ''}`
         }]
     };
 }
@@ -278,39 +279,40 @@ async function translateWithAI(text, context = '', previousTranslations = '') {
             // Force UI update
             await new Promise(resolve => setTimeout(resolve, 10));
         }
-
+        
         // Validate config first
         const validationResult = await validateTranslationConfig();
         if (!validationResult.valid) {
             console.error('[Translation] Invalid config:', validationResult.message);
             return `Translation Error: ${validationResult.message}`;
         }
-
+        
         const aiProviders = await getAIProviders();
-        const defaultProviderId = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', 'translateDefaultAiProvider', 'openai');
+        const defaultProviderId = await electronAPI.invoke('store-get', 'translateDefaultAiProvider', 'openai');
         const provider = aiProviders.find(p => p.id === defaultProviderId);
-
+        
         if (!provider) {
             console.error('[Translation] Provider not found:', defaultProviderId);
             return "Translation Error: Selected AI provider not found";
         }
-
-        const apiKey = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', provider.apiKeySettingKey, '');
-        const defaultModel = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', 'translateDefaultAiModel', provider.defaultModel);
-        const targetLanguage = await electron__WEBPACK_IMPORTED_MODULE_0__.ipcRenderer.invoke('store-get', 'targetLanguage', 'en');
-
+        
+        const apiKey = await electronAPI.invoke('store-get', provider.apiKeySettingKey, '');
+        const defaultModel = await electronAPI.invoke('store-get', 'translateDefaultAiModel', provider.defaultModel);
+        const targetLanguage = await electronAPI.invoke('store-get', 'targetLanguage', 'en');
+        
         console.log(`[Translation] Using provider: ${provider.name}, model: ${defaultModel}, endpoint: ${provider.endpoint}`);
-
+        
         // Format differently for Gemini
         const isGemini = !!provider.isGemini;
         const endpoint = provider.endpoint;
+        
         const headers = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
         };
-
+        
         const prompt = buildTranslationPrompt(text, context, previousTranslations, targetLanguage);
-
+        
         // Different request formats for different providers
         let requestBody;
         if (isGemini) {
@@ -341,12 +343,12 @@ async function translateWithAI(text, context = '', previousTranslations = '') {
                 max_tokens: 1024
             };
         }
-
+        
         console.log('[Translation] Sending request to:', endpoint);
-
+        
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
-
+        
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
@@ -354,18 +356,18 @@ async function translateWithAI(text, context = '', previousTranslations = '') {
                 body: JSON.stringify(requestBody),
                 signal: controller.signal
             });
-
+            
             clearTimeout(timeoutId);
-
+            
             if (!response.ok) {
                 const errorData = await response.text();
                 console.error(`[Translation] API error (${response.status}):`, errorData);
                 throw new Error(`API error: ${response.status} ${response.statusText}`);
             }
-
+            
             const data = await response.json();
             console.log('[Translation] Response data:', data);
-
+            
             // Extract response text based on API format
             let translatedText;
             if (data.choices && data.choices[0] && data.choices[0].message) {
@@ -378,13 +380,13 @@ async function translateWithAI(text, context = '', previousTranslations = '') {
                 console.error('[Translation] Unknown response format:', data);
                 throw new Error('Unknown API response format');
             }
-
+            
             // Clean up any quotes
             translatedText = translatedText.replace(/^["']|["']$/g, '');
-
+            
             console.log('[Translation] Final translated text:', translatedText);
             return translatedText;
-
+            
         } catch (fetchError) {
             clearTimeout(timeoutId);
             if (fetchError.name === 'AbortError') {
@@ -392,7 +394,6 @@ async function translateWithAI(text, context = '', previousTranslations = '') {
             }
             throw fetchError;
         }
-
     } catch (error) {
         console.error('[Translation] Error during translation:', error);
         return `Translation Error: ${error.message}`;
@@ -6253,14 +6254,6 @@ const appState = new AppState();
 module.exports = { appState };
 
 
-/***/ }),
-
-/***/ 482:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("electron");
-
 /***/ })
 
 /******/ 	});
@@ -6290,18 +6283,6 @@ module.exports = require("electron");
 /******/ 	}
 /******/ 	
 /************************************************************************/
-/******/ 	/* webpack/runtime/compat get default export */
-/******/ 	(() => {
-/******/ 		// getDefaultExport function for compatibility with non-harmony modules
-/******/ 		__webpack_require__.n = (module) => {
-/******/ 			var getter = module && module.__esModule ?
-/******/ 				() => (module['default']) :
-/******/ 				() => (module);
-/******/ 			__webpack_require__.d(getter, { a: getter });
-/******/ 			return getter;
-/******/ 		};
-/******/ 	})();
-/******/ 	
 /******/ 	/* webpack/runtime/define property getters */
 /******/ 	(() => {
 /******/ 		// define getter functions for harmony exports
@@ -6382,24 +6363,23 @@ async function isInputDeviceAvailable(deviceId) {
         return false;
     }
 }
-// EXTERNAL MODULE: external "electron"
-var external_electron_ = __webpack_require__(482);
 ;// ./modules/recording/audioManager.js
 
 
+const electronAPI = window.electronAPI;
 
 class AudioManager {
     constructor() {
         this.stream = null;
         this.mediaRecorder = null;
     }
-
+    
     async initializeAudio(isRestart = false) {
-        const selectedDeviceId = await external_electron_.ipcRenderer.invoke('store-get', 'defaultInputDevice', '');
+        const selectedDeviceId = await electronAPI.invoke('store-get', 'defaultInputDevice', '');
         
         if (selectedDeviceId && await isInputDeviceAvailable(selectedDeviceId)) {
-            this.stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { deviceId: selectedDeviceId } 
+            this.stream = await navigator.mediaDevices.getUserMedia({
+                audio: { deviceId: selectedDeviceId }
             });
         } else {
             console.warn('[AudioManager] Using default input device');
@@ -6408,11 +6388,11 @@ class AudioManager {
                 document.getElementById('source-text').textContent = 'Using default input device.';
             }
         }
-
+        
         this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'audio/webm' });
         return this.mediaRecorder;
     }
-
+    
     setupDataHandler(socket) {
         if (this.mediaRecorder) {
             this.mediaRecorder.ondataavailable = (e) => {
@@ -6422,25 +6402,23 @@ class AudioManager {
             };
         }
     }
-
+    
     startRecording() {
         if (this.mediaRecorder) {
             this.mediaRecorder.start(50);
         }
     }
-
+    
     stopRecording() {
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
             this.mediaRecorder.stop();
         }
-        
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
         }
-        
         console.log('[AudioManager] Recording stopped');
     }
-
+    
     cleanup() {
         this.stopRecording();
         this.stream = null;
@@ -6453,51 +6431,52 @@ var appState = __webpack_require__(246);
 ;// ./modules/recording/deepgramService.js
 
 
+const deepgramService_electronAPI = window.electronAPI;
 
 class DeepgramService {
     constructor() {
         this.socket = null;
     }
-
+    
     async createWebSocket() {
         const combined = appState.appState.sourceLanguage;
         const [selectedModel, selectedLanguage] = combined.split('|');
         
         let deepgramKey = appState.appState.deepgramApiKey;
         if (!deepgramKey) {
-            deepgramKey = await external_electron_.ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
+            deepgramKey = await deepgramService_electronAPI.invoke('store-get', 'deepgramApiKey', '');
             if (deepgramKey) {
                 const { runInAction } = __webpack_require__(813);
                 runInAction(() => { appState.appState.setDeepgramApiKey(deepgramKey); });
             }
         }
-
+        
         if (!deepgramKey) {
             throw new Error('No Deepgram API key set');
         }
-
+        
         let queryParams = `?model=${selectedModel}&language=${selectedLanguage}&punctuate=true&interim_results=true`;
         if (appState.appState.diarizationEnabled) {
             queryParams += '&diarize=true';
         }
-
+        
         const wsUrl = `wss://api.deepgram.com/v1/listen${queryParams}`;
         console.log('[DeepgramService] WebSocket URL:', wsUrl);
-
+        
         this.socket = new WebSocket(wsUrl, ['token', deepgramKey]);
         return this.socket;
     }
-
+    
     setupErrorHandler() {
         if (this.socket) {
             this.socket.onerror = (error) => {
                 console.error('[DeepgramService] WebSocket error:', error);
                 document.getElementById('source-text').textContent = "Deepgram connection failed.";
-                external_electron_.ipcRenderer.send('typing-app-recording-state-changed', false);
+                deepgramService_electronAPI.send('typing-app-recording-state-changed', false);
             };
         }
     }
-
+    
     setupCloseHandler() {
         if (this.socket) {
             this.socket.onclose = () => {
@@ -6505,7 +6484,7 @@ class DeepgramService {
             };
         }
     }
-
+    
     close() {
         if (this.socket) {
             this.socket.close();
@@ -6653,13 +6632,13 @@ class uiUpdater_UIUpdater {
 // EXTERNAL MODULE: ./modules/translation.js
 var modules_translation = __webpack_require__(804);
 ;// ./modules/utils.js
-
+const utils_electronAPI = window.electronAPI;
 
 async function pasteText(text) {
     try {
-        const result = await external_electron_.ipcRenderer.invoke('paste-text', text); // Await the result
-        if (!result) { // Check for failure from main process
-            throw new Error("Paste operation failed in main process.");
+        const result = await utils_electronAPI.invoke('paste-text', text);
+        if (!result.success) {
+            throw new Error(result.error || "Paste operation failed in main process.");
         }
     } catch (error) {
         console.error('Error simulating auto paste:', error);
@@ -6835,6 +6814,39 @@ class TranslationHandler {
     }
 }
 
+;// ./modules/recording/ipcHandler.js
+
+
+class IPCHandler {
+    static setupListeners() {
+        // Get electronAPI from window
+        const electronAPI = window.electronAPI;
+        
+        if (!electronAPI) {
+            console.error('[IPCHandler] electronAPI not available');
+            return;
+        }
+        
+        electronAPI.on('typing-app-typing-mode-changed', (isActive) => {
+            recordingState_recordingState.typingActive = isActive;
+        });
+    }
+    
+    static sendRecordingStateChanged(isRecording) {
+        const electronAPI = window.electronAPI;
+        if (electronAPI) {
+            electronAPI.send('typing-app-recording-state-changed', isRecording);
+        }
+    }
+    
+    static sendTranscriptUpdated(text) {
+        const electronAPI = window.electronAPI;
+        if (electronAPI) {
+            electronAPI.send('typing-app-transcript-updated', text);
+        }
+    }
+}
+
 ;// ./modules/recording/transcriptProcessor.js
 
 
@@ -6847,89 +6859,78 @@ class TranscriptProcessor {
     static async processMessage(parsed) {
         const alt = parsed?.channel?.alternatives[0];
         if (!alt) return;
-
+        
         const words = alt.words || [];
         const plainTranscript = alt.transcript || "";
-
+        
         if (appState.appState.diarizationEnabled) {
             await this.processDiarizedTranscript(parsed, words, plainTranscript);
         } else {
             await this.processNonDiarizedTranscript(parsed, plainTranscript);
         }
     }
-
+    
     static async processDiarizedTranscript(parsed, words, plainTranscript) {
         (0,paragraphBuilder.syncEphemeralWords)(recordingState_recordingState.ephemeralWords, words);
-
+        
         if (!parsed.is_final) {
             const ephemeralParagraphs = (0,paragraphBuilder.buildParagraphsFromWords)([...recordingState_recordingState.ephemeralWords.values()]);
             const newContent = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.finalParagraphs, ephemeralParagraphs);
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
-
+            
             const plainText = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, ephemeralParagraphs);
-            external_electron_.ipcRenderer.send('typing-app-transcript-updated', plainText);
+            IPCHandler.sendTranscriptUpdated(plainText);
         } else {
             const ephemeralParagraphs = (0,paragraphBuilder.buildParagraphsFromWords)([...recordingState_recordingState.ephemeralWords.values()]);
             recordingState_recordingState.finalParagraphs.push(...ephemeralParagraphs);
             recordingState_recordingState.ephemeralWords.clear();
-
+            
             const newContent = (0,paragraphBuilder.buildHTMLTranscript)(recordingState_recordingState.finalParagraphs, []);
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
-
+            
             const plainText = (0,paragraphBuilder.buildPlainTranscript)(recordingState_recordingState.finalParagraphs, []);
-            external_electron_.ipcRenderer.send('typing-app-transcript-updated', plainText);
-
+            IPCHandler.sendTranscriptUpdated(plainText);
+            
             recordingState_recordingState.transcriptions.push(plainTranscript);
             if (recordingState_recordingState.transcriptions.length > 10) recordingState_recordingState.transcriptions.shift();
-
+            
             await TranslationHandler.handleTranslationAndPasting(plainTranscript, true, ephemeralParagraphs);
+            
             console.log('[TranscriptProcessor] All Deepgram Responses:', recordingState_recordingState.deepgramCaptions);
         }
     }
-
+    
     static async processNonDiarizedTranscript(parsed, plainTranscript) {
         const alt = parsed?.channel?.alternatives[0];
         if (!alt) return;
-
+        
         const transcript = alt.transcript || "";
         if (!transcript.trim()) return;
-
+        
         if (parsed.is_final) {
             recordingState_recordingState.finalTranscription += " " + transcript;
-            const newContent = recordingState_recordingState.finalTranscription.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const newContent = recordingState_recordingState.finalTranscription
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
-
+            
             recordingState_recordingState.transcriptions.push(transcript);
             if (recordingState_recordingState.transcriptions.length > 10) recordingState_recordingState.transcriptions.shift();
-
+            
             await TranslationHandler.handleTranslationAndPasting(transcript, true);
-            external_electron_.ipcRenderer.send('typing-app-transcript-updated', recordingState_recordingState.finalTranscription);
+            IPCHandler.sendTranscriptUpdated(recordingState_recordingState.finalTranscription);
         } else {
             const interimText = recordingState_recordingState.finalTranscription + " " + transcript;
-            const newContent = interimText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const newContent = interimText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
             uiUpdater_UIUpdater.updateSourceText(newContent, recordingState_recordingState.preservedContent);
-            external_electron_.ipcRenderer.send('typing-app-transcript-updated', interimText);
+            IPCHandler.sendTranscriptUpdated(interimText);
         }
-    }
-}
-
-;// ./modules/recording/ipcHandler.js
-
-
-
-class IPCHandler {
-    static setupListeners() {
-        external_electron_.ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
-            recordingState_recordingState.typingActive = isActive;
-        });
-    }
-
-    static sendRecordingStateChanged(isRecording) {
-        external_electron_.ipcRenderer.send('typing-app-recording-state-changed', isRecording);
-    }
-
-    static sendTranscriptUpdated(text) {
-        external_electron_.ipcRenderer.send('typing-app-transcript-updated', text);
     }
 }
 
@@ -6946,7 +6947,7 @@ var mobx_esm = __webpack_require__(813);
 
 
 
-
+const recording_electronAPI = window.electronAPI;
 const audioManager = new AudioManager();
 const deepgramService = new DeepgramService();
 
@@ -6956,14 +6957,14 @@ async function startRecording(isRestart = false) {
     recordingState_recordingState.socket = null;
     
     try {
-        const diarizationEnabledFromStore = await external_electron_.ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
+        const diarizationEnabledFromStore = await recording_electronAPI.invoke('store-get', 'diarizationEnabled', false);
         (0,mobx_esm.runInAction)(() => { appState.appState.setDiarizationEnabled(diarizationEnabledFromStore); });
-
+        
         console.log('[Recording] diarizationEnabled:', appState.appState.diarizationEnabled);
-
+        
         // Initialize audio
         recordingState_recordingState.mediaRecorder = await audioManager.initializeAudio(isRestart);
-
+        
         // Validate translation configuration if enabled
         if (appState.appState.enableTranslation) {
             const { validateTranslationConfig } = await Promise.resolve(/* import() */).then(__webpack_require__.bind(__webpack_require__, 804));
@@ -6972,15 +6973,15 @@ async function startRecording(isRestart = false) {
                 document.getElementById('translated-text').innerHTML = `<span class="error-message">${validationResult.message}</span>`;
             }
         }
-
+        
         // Create WebSocket connection
         recordingState_recordingState.socket = await deepgramService.createWebSocket();
         deepgramService.setupErrorHandler();
-
+        
         recordingState_recordingState.socket.onopen = async () => {
             console.log('[Recording] WebSocket opened');
             (0,mobx_esm.runInAction)(() => { appState.appState.setIsRecording(true); });
-
+            
             if (isRestart && recordingState_recordingState.preservedContent) {
                 uiUpdater_UIUpdater.updateSourceText('', recordingState_recordingState.preservedContent);
             } else if (!isRestart) {
@@ -6991,28 +6992,36 @@ async function startRecording(isRestart = false) {
                 recordingState_recordingState.ephemeralWords.clear();
                 uiUpdater_UIUpdater.clearTexts();
             }
-
+            
             audioManager.setupDataHandler(recordingState_recordingState.socket);
             audioManager.startRecording();
             IPCHandler.sendRecordingStateChanged(true);
+            
             console.log('[Recording] Recording started');
-
-            const autoStopTimer = await external_electron_.ipcRenderer.invoke('store-get', 'autoStopTimer', 60);
+            
+            const autoStopTimer = await recording_electronAPI.invoke('store-get', 'autoStopTimer', 60);
             recordingState_recordingState.autoStopTimerId = setTimeout(() => {
                 stopRecording();
                 document.getElementById('source-text').textContent += "\n---TRANSCRIPTION STOPPED, TIME LIMIT REACHED---";
             }, autoStopTimer * 60000);
         };
-
+        
         recordingState_recordingState.socket.onmessage = async (event) => {
             const parsed = JSON.parse(event.data || '{}');
             recordingState_recordingState.deepgramCaptions.push(parsed);
             await TranscriptProcessor.processMessage(parsed);
         };
-
+        
         deepgramService.setupCloseHandler();
         uiUpdater_UIUpdater.updateButtons(true);
-
+        
+        // Update recording indicator
+        recording_electronAPI.send('recording-state-update', true);
+        const indicator = document.getElementById('recordingIndicator');
+        if (indicator) {
+            indicator.classList.add('active');
+        }
+        
     } catch (error) {
         console.error('[Recording] Error starting recording:', error);
         document.getElementById('source-text').textContent = 'Recording failed: ' + error.message;
@@ -7025,52 +7034,59 @@ function stopRecording() {
     audioManager.stopRecording();
     deepgramService.close();
     recordingState_recordingState.socket = null;
-
+    
     (0,mobx_esm.runInAction)(() => { appState.appState.setIsRecording(false); });
     IPCHandler.sendRecordingStateChanged(false);
     recordingState_recordingState.clearAutoStopTimer();
-
     uiUpdater_UIUpdater.updateButtons(false);
-}
-
-function onResetClicked() {
-    const isRecordingActive = !!(recordingState.mediaRecorder && recordingState.mediaRecorder.state !== 'inactive' && recordingState.socket);
     
-    if (isRecordingActive) {
-        recordingState.finalParagraphs = [];
-        recordingState.translationParagraphs = [];
-        recordingState.ephemeralWords.clear();
-        recordingState.finalTranscription = "";
-        recordingState.deepgramCaptions = [];
-        recordingState.transcriptions = [];
-        recordingState.translations = [];
-        recordingState.preservedContent = "";
-        
-        UIUpdater.clearTexts();
-        UIUpdater.scrollPaneToTop('.source-pane');
-        UIUpdater.scrollPaneToTop('.translated-pane');
-        
-        console.log('[Recording] Partial reset done. Recording continues...');
-    } else {
-        resetRecordingData();
+    // Update recording indicator
+    recording_electronAPI.send('recording-state-update', false);
+    const indicator = document.getElementById('recordingIndicator');
+    if (indicator) {
+        indicator.classList.remove('active');
     }
 }
 
+function onResetClicked() {
+    const isRecordingActive = !!(recordingState.mediaRecorder && 
+        recordingState.mediaRecorder.state !== 'inactive' && 
+        recordingState.socket);
+    
+    if (isRecordingActive) {
+        recordingState.finalParagraphs = [];
+       recordingState.translationParagraphs = [];
+       recordingState.ephemeralWords.clear();
+       recordingState.finalTranscription = "";
+       recordingState.deepgramCaptions = [];
+       recordingState.transcriptions = [];
+       recordingState.translations = [];
+       recordingState.preservedContent = "";
+       
+       UIUpdater.clearTexts();
+       UIUpdater.scrollPaneToTop('.source-pane');
+       UIUpdater.scrollPaneToTop('.translated-pane');
+       
+       console.log('[Recording] Partial reset done. Recording continues...');
+   } else {
+       resetRecordingData();
+   }
+}
+
 function resetRecordingData() {
-    recordingState_recordingState.reset();
-    uiUpdater_UIUpdater.clearTexts();
-    uiUpdater_UIUpdater.scrollPaneToTop('.source-pane');
-    uiUpdater_UIUpdater.scrollPaneToTop('.translated-pane');
-    console.log('[Recording] Full recording data reset');
+   recordingState_recordingState.reset();
+   uiUpdater_UIUpdater.clearTexts();
+   uiUpdater_UIUpdater.scrollPaneToTop('.source-pane');
+   uiUpdater_UIUpdater.scrollPaneToTop('.translated-pane');
+   console.log('[Recording] Full recording data reset');
 }
 
 function preserveCurrentContent() {
-    recordingState_recordingState.preserveCurrentContent();
+   recordingState_recordingState.preserveCurrentContent();
 }
 
 // Export the translation function to window for direct access
 window.translateWithAI = modules_translation/* translateWithAI */.z;
-
 ;// ./bridgeConnector.js
 // This file connects the webpack bundle functions to the global window object
 
@@ -7096,17 +7112,15 @@ console.log('Bridge connector initialized - recording functions connected to glo
 
 // This entry needs to be wrapped in an IIFE because it needs to be isolated against other entry modules.
 (() => {
-// Simplified version that uses global window objects instead of imports
-
-// Access the functions from the global window object
+// Simplified version that uses the electronAPI from preload
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('Renderer initialized');
     
-    // Get a reference to the electron module
-    const { ipcRenderer } = window.require ? window.require('electron') : {};
+    // Get the electronAPI from preload
+    const electronAPI = window.electronAPI;
     
     // Get functions from globals
-    const ui = window.ui || {};
+    const ui = window.uiCore || {};
     
     // Initialize UI
     if (typeof ui.initializeUI === 'function') {
@@ -7118,11 +7132,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!apiKey) {
             return { status: "not_set", message: "Deepgram API key is not set. Please set it in settings." };
         }
+        
         try {
             const response = await fetch("https://api.deepgram.com/v1/auth/token", {
-                headers: {"Authorization": `Token ${apiKey}`}
+                headers: {
+                    "Authorization": `Token ${apiKey}`
+                }
             });
+            
             if (response.ok) return { status: "valid" };
+            
             const errorData = await response.json();
             return { status: "invalid", message: `Deepgram API Key is invalid: ${errorData.err_msg || 'Unknown error'}` };
         } catch (error) {
@@ -7131,10 +7150,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     async function updateDeepgramValidationStatus() {
-        const deepgramApiKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
+        const deepgramApiKey = await electronAPI.invoke('store-get', 'deepgramApiKey', '');
         const result = await validateDeepgramToken(deepgramApiKey);
         const sourceTextElement = document.getElementById('source-text');
         const startButton = document.getElementById('start');
+        
         if (result.status === "valid") {
             sourceTextElement.textContent = '';
             startButton.disabled = false;
@@ -7146,7 +7166,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Button event handlers
     document.getElementById('start')?.addEventListener('click', () => {
-        // We'll trigger external startRecording function
         if (window.recording && typeof window.recording.startRecording === 'function') {
             window.recording.startRecording(false);
         } else {
@@ -7168,7 +7187,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         document.getElementById('source-text').textContent = 'Reset complete';
         document.getElementById('translated-text').textContent = '';
-        ipcRenderer.send('reset-typing-app');
+        electronAPI.send('reset-typing-app');
         setTimeout(() => {
             document.getElementById('source-text').textContent = '';
         }, 2000);
@@ -7177,7 +7196,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('typingAppButton')?.addEventListener('click', () => {
         console.log('[Renderer] Typing App button clicked');
         document.getElementById('pasteOption').value = 'source';
-        ipcRenderer.send('open-typing-app');
+        electronAPI.send('open-typing-app');
     });
     
     document.getElementById('settingsIcon')?.addEventListener('click', () => {
@@ -7189,8 +7208,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const toggleTranslate = document.getElementById('toggleTranslate');
     
     // Get settings
-    const diarizationEnabled = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
-    const enableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+    const diarizationEnabled = await electronAPI.invoke('store-get', 'diarizationEnabled', false);
+    const enableTranslation = await electronAPI.invoke('store-get', 'enableTranslation', false);
     
     // Update app state
     if (window.appState) {
@@ -7214,10 +7233,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleDiarize?.addEventListener('click', async () => {
         const oldState = window.appState?.diarizationEnabled || false;
         const newState = !oldState;
+        
         if (window.appState) {
             window.appState.setDiarizationEnabled(newState);
         }
-        ipcRenderer.invoke('store-set', 'diarizationEnabled', newState);
+        
+        await electronAPI.invoke('store-set', 'diarizationEnabled', newState);
         updateToggleButton('toggleDiarize', newState);
         
         if (window.appState?.isRecording) {
@@ -7230,35 +7251,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
     
-    toggleTranslate?.addEventListener('click', () => {
+    toggleTranslate?.addEventListener('click', async () => {
         const newState = !(window.appState?.enableTranslation || false);
+        
         if (window.appState) {
             window.appState.setEnableTranslation(newState);
         }
-        updateToggleButton('toggleTranslate', newState);
-        ipcRenderer.invoke('store-set', 'enableTranslation', newState);
         
-        if (ui.updateTranslationUI) {
-            ui.updateTranslationUI(newState);
+        updateToggleButton('toggleTranslate', newState);
+        await electronAPI.invoke('store-set', 'enableTranslation', newState);
+        
+        if (window.translationUI && window.translationUI.updateTranslationUI) {
+            window.translationUI.updateTranslationUI(newState);
         }
         
-        ipcRenderer.send('translation-setting-changed', newState);
+        electronAPI.send('translation-setting-changed', newState);
     });
     
     // Initialize UI
-    const storedEnableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
-    if (ui.updateTranslationUI) {
-        ui.updateTranslationUI(storedEnableTranslation);
+    const storedEnableTranslation = await electronAPI.invoke('store-get', 'enableTranslation', false);
+    if (window.translationUI && window.translationUI.updateTranslationUI) {
+        window.translationUI.updateTranslationUI(storedEnableTranslation);
     }
     
-    if (ui.updateSourceLanguageDropdown) {
-        ui.updateSourceLanguageDropdown();
+    if (window.languageManager && window.languageManager.updateSourceLanguageDropdown) {
+        window.languageManager.updateSourceLanguageDropdown();
     }
     
     await updateDeepgramValidationStatus();
     
-    // Add missing IPC listener for global-toggle-recording event
-    ipcRenderer.on('global-toggle-recording', () => {
+    // Add IPC listeners
+    const globalToggleListener = electronAPI.on('global-toggle-recording', () => {
         const stopBtn = document.getElementById('stop');
         console.log(`[Renderer] Received global-toggle-recording, stopBtn display: ${stopBtn.style.display}`);
         
@@ -7274,7 +7297,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
+    
+    // Update recording indicator
+    const recordingStateListener = electronAPI.on('recording-state-update', (isRecording) => {
+        const indicator = document.getElementById('recordingIndicator');
+        if (indicator) {
+            if (isRecording) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        }
+    });
+    
+    // Cleanup listeners on window unload
+    window.addEventListener('beforeunload', () => {
+        if (globalToggleListener) globalToggleListener();
+        if (recordingStateListener) recordingStateListener();
+    });
 });
+
 })();
 
 /******/ })()

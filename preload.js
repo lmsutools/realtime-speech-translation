@@ -1,39 +1,86 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const remote = require('@electron/remote'); // For specific, controlled exposure
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object.
 contextBridge.exposeInMainWorld('electronAPI', {
-  // IPC Renderer
-  send: (channel, data) => ipcRenderer.send(channel, data),
-  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-  on: (channel, func) => {
-    // Deliberately strip event as it includes `sender`
-    const subscription = (event, ...args) => func(...args);
-    ipcRenderer.on(channel, subscription);
-    // Return a cleanup function
-    return () => ipcRenderer.removeListener(channel, subscription);
-  },
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
-
-  // @electron/remote (use with extreme caution - prefer IPC for most things)
-  // Only expose what is absolutely necessary from remote.
-  // For example, if you need dialogs from renderer:
-  getRemoteDialog: () => remote.dialog,
-  // If you need to get a global from main process (less safe, try to avoid)
-  // getGlobal: (name) => remote.getGlobal(name),
-
-  // Example: If you need to access app version from renderer
-  getAppVersion: () => remote.app.getVersion(),
-
-  // Add other specific remote modules or properties if essential,
-  // but always prefer IPC for actions and data transfer.
-  // e.g., if your renderer truly needs to know the platform:
-  getPlatform: () => process.platform, // process.platform is safe to expose
-
-  // Expose MobX appState if needed directly (though usually updated via IPC)
-  // This would require appState to be gettable via remote.getGlobal or a dedicated IPC.
-  // For now, assume appState is managed via IPC messages like 'update-app-state'.
+    // IPC Renderer
+    send: (channel, data) => {
+        // Whitelist channels
+        const validChannels = [
+            'open-settings',
+            'open-typing-app',
+            'translation-setting-changed',
+            'model-setting-changed',
+            'typing-app-transcript-updated',
+            'typing-app-recording-state-changed',
+            'typing-app-typing-mode-changed',
+            'global-toggle-recording',
+            'typing-app-resize',
+            'update-global-shortcut',
+            'reset-typing-app',
+            'recording-state-update',
+            'setting-changed'
+        ];
+        if (validChannels.includes(channel)) {
+            ipcRenderer.send(channel, data);
+        }
+    },
+    
+    invoke: (channel, ...args) => {
+        // Whitelist channels
+        const validChannels = [
+            'store-get',
+            'store-set',
+            'store-delete',
+            'store-info',
+            'paste-text',
+            'test-translation'
+        ];
+        if (validChannels.includes(channel)) {
+            return ipcRenderer.invoke(channel, ...args);
+        }
+    },
+    
+    on: (channel, func) => {
+        // Whitelist channels
+        const validChannels = [
+            'global-toggle-recording',
+            'typing-app-typing-mode-changed',
+            'update-app-state',
+            'update-translation-ui',
+            'update-source-languages',
+            'typing-app-window-closed',
+            'typing-app-recording-state',
+            'typing-app-update-text',
+            'recording-state-update-from-typing-app',
+            'recording-state-update'
+        ];
+        if (validChannels.includes(channel)) {
+            // Deliberately strip event as it includes `sender`
+            const subscription = (event, ...args) => func(...args);
+            ipcRenderer.on(channel, subscription);
+            
+            // Return a cleanup function
+            return () => ipcRenderer.removeListener(channel, subscription);
+        }
+    },
+    
+    removeAllListeners: (channel) => {
+        ipcRenderer.removeAllListeners(channel);
+    },
+    
+    // Platform info
+    getPlatform: () => process.platform,
+    
+    // App version (if needed)
+    getAppVersion: () => {
+        try {
+            const { app } = require('electron');
+            return app.getVersion();
+        } catch {
+            return '1.0.0';
+        }
+    }
 });
 
 console.log('[Preload] electronAPI exposed to renderer.');

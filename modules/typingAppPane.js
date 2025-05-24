@@ -1,13 +1,12 @@
 (function() {
-    // Use the globally available electron
-    const ipcRenderer = window.require ? window.require('electron').ipcRenderer : null;
+    // Use the electronAPI from preload
+    const electronAPI = window.electronAPI;
     
     // Get appState from the global window object
     const appState = window.appState;
     
     async function loadTypingAppSettings() {
         const advancedPane = document.getElementById('advanced');
-        
         advancedPane.innerHTML = `
             <div class="setting-group">
                 <label for="typingAppGlobalShortcut">Global Shortcut:</label>
@@ -31,9 +30,9 @@
         const setShortcutButton = document.getElementById('setShortcutButton');
         
         // Load saved values
-        const currentShortcut = await ipcRenderer.invoke('store-get', 'typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
-        const activeWidth = await ipcRenderer.invoke('store-get', 'typingAppActiveWidth', 400);
-        const activeHeight = await ipcRenderer.invoke('store-get', 'typingAppActiveHeight', 200);
+        const currentShortcut = await electronAPI.invoke('store-get', 'typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
+        const activeWidth = await electronAPI.invoke('store-get', 'typingAppActiveWidth', 400);
+        const activeHeight = await electronAPI.invoke('store-get', 'typingAppActiveHeight', 200);
         
         shortcutInput.value = currentShortcut;
         widthInput.value = activeWidth;
@@ -55,12 +54,10 @@
             const key = event.key;
             
             // Skip if it's a modifier key we already have
-            if (
-                (key === 'Control' && pressedKeys.includes('Control')) ||
+            if ((key === 'Control' && pressedKeys.includes('Control')) ||
                 (key === 'Shift' && pressedKeys.includes('Shift')) ||
                 (key === 'Alt' && pressedKeys.includes('Alt')) ||
-                (key === 'Meta' && pressedKeys.includes('Meta'))
-            ) {
+                (key === 'Meta' && pressedKeys.includes('Meta'))) {
                 return;
             }
             
@@ -79,34 +76,31 @@
             }
             
             // Add the main key if it's not a modifier
-            if (
-                key !== 'Control' && 
-                key !== 'Shift' && 
-                key !== 'Alt' && 
-                key !== 'Meta' && 
-                !pressedKeys.includes(key)
-            ) {
+            if (key !== 'Control' &&
+                key !== 'Shift' &&
+                key !== 'Alt' &&
+                key !== 'Meta' &&
+                !pressedKeys.includes(key)) {
                 pressedKeys.push(key);
             }
             
             // Format the shortcut string
             let shortcutString = '';
-            
             if (pressedKeys.includes('Control')) {
-                shortcutString += process.platform === 'darwin' ? 'Command+' : 'Control+';
+                shortcutString += electronAPI.getPlatform() === 'darwin' ? 'Command+' : 'Control+';
             }
-            if (pressedKeys.includes('Meta') && process.platform !== 'darwin') {
+            if (pressedKeys.includes('Meta') && electronAPI.getPlatform() !== 'darwin') {
                 shortcutString += 'Super+';
             }
             if (pressedKeys.includes('Alt')) {
-                shortcutString += process.platform === 'darwin' ? 'Option+' : 'Alt+';
+                shortcutString += electronAPI.getPlatform() === 'darwin' ? 'Option+' : 'Alt+';
             }
             if (pressedKeys.includes('Shift')) {
                 shortcutString += 'Shift+';
             }
             
             // Add the main key
-            const mainKey = pressedKeys.find(k => 
+            const mainKey = pressedKeys.find(k =>
                 k !== 'Control' && k !== 'Shift' && k !== 'Alt' && k !== 'Meta'
             );
             
@@ -126,8 +120,8 @@
         setShortcutButton.addEventListener('click', async () => {
             const newShortcut = shortcutInput.value;
             if (newShortcut) {
-                await ipcRenderer.invoke('store-set', 'typingAppGlobalShortcut', newShortcut);
-                ipcRenderer.send('update-global-shortcut', newShortcut);
+                await electronAPI.invoke('store-set', 'typingAppGlobalShortcut', newShortcut);
+                electronAPI.send('update-global-shortcut', newShortcut);
             }
         });
         
@@ -135,14 +129,14 @@
         widthInput.addEventListener('change', async () => {
             const newWidth = parseInt(widthInput.value);
             if (newWidth >= 100 && newWidth <= 800) {
-                await ipcRenderer.invoke('store-set', 'typingAppActiveWidth', newWidth);
+                await electronAPI.invoke('store-set', 'typingAppActiveWidth', newWidth);
             }
         });
         
         heightInput.addEventListener('change', async () => {
             const newHeight = parseInt(heightInput.value);
             if (newHeight >= 100 && newHeight <= 600) {
-                await ipcRenderer.invoke('store-set', 'typingAppActiveHeight', newHeight);
+                await electronAPI.invoke('store-set', 'typingAppActiveHeight', newHeight);
             }
         });
     }

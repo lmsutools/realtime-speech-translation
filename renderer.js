@@ -1,14 +1,12 @@
-// Simplified version that uses global window objects instead of imports
-
-// Access the functions from the global window object
+// Simplified version that uses the electronAPI from preload
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('Renderer initialized');
     
-    // Get a reference to the electron module
-    const { ipcRenderer } = window.require ? window.require('electron') : {};
+    // Get the electronAPI from preload
+    const electronAPI = window.electronAPI;
     
     // Get functions from globals
-    const ui = window.ui || {};
+    const ui = window.uiCore || {};
     
     // Initialize UI
     if (typeof ui.initializeUI === 'function') {
@@ -20,11 +18,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!apiKey) {
             return { status: "not_set", message: "Deepgram API key is not set. Please set it in settings." };
         }
+        
         try {
             const response = await fetch("https://api.deepgram.com/v1/auth/token", {
-                headers: {"Authorization": `Token ${apiKey}`}
+                headers: {
+                    "Authorization": `Token ${apiKey}`
+                }
             });
+            
             if (response.ok) return { status: "valid" };
+            
             const errorData = await response.json();
             return { status: "invalid", message: `Deepgram API Key is invalid: ${errorData.err_msg || 'Unknown error'}` };
         } catch (error) {
@@ -33,10 +36,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     async function updateDeepgramValidationStatus() {
-        const deepgramApiKey = await ipcRenderer.invoke('store-get', 'deepgramApiKey', '');
+        const deepgramApiKey = await electronAPI.invoke('store-get', 'deepgramApiKey', '');
         const result = await validateDeepgramToken(deepgramApiKey);
         const sourceTextElement = document.getElementById('source-text');
         const startButton = document.getElementById('start');
+        
         if (result.status === "valid") {
             sourceTextElement.textContent = '';
             startButton.disabled = false;
@@ -48,7 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Button event handlers
     document.getElementById('start')?.addEventListener('click', () => {
-        // We'll trigger external startRecording function
         if (window.recording && typeof window.recording.startRecording === 'function') {
             window.recording.startRecording(false);
         } else {
@@ -70,7 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         document.getElementById('source-text').textContent = 'Reset complete';
         document.getElementById('translated-text').textContent = '';
-        ipcRenderer.send('reset-typing-app');
+        electronAPI.send('reset-typing-app');
         setTimeout(() => {
             document.getElementById('source-text').textContent = '';
         }, 2000);
@@ -79,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('typingAppButton')?.addEventListener('click', () => {
         console.log('[Renderer] Typing App button clicked');
         document.getElementById('pasteOption').value = 'source';
-        ipcRenderer.send('open-typing-app');
+        electronAPI.send('open-typing-app');
     });
     
     document.getElementById('settingsIcon')?.addEventListener('click', () => {
@@ -91,8 +94,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const toggleTranslate = document.getElementById('toggleTranslate');
     
     // Get settings
-    const diarizationEnabled = await ipcRenderer.invoke('store-get', 'diarizationEnabled', false);
-    const enableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
+    const diarizationEnabled = await electronAPI.invoke('store-get', 'diarizationEnabled', false);
+    const enableTranslation = await electronAPI.invoke('store-get', 'enableTranslation', false);
     
     // Update app state
     if (window.appState) {
@@ -116,10 +119,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleDiarize?.addEventListener('click', async () => {
         const oldState = window.appState?.diarizationEnabled || false;
         const newState = !oldState;
+        
         if (window.appState) {
             window.appState.setDiarizationEnabled(newState);
         }
-        ipcRenderer.invoke('store-set', 'diarizationEnabled', newState);
+        
+        await electronAPI.invoke('store-set', 'diarizationEnabled', newState);
         updateToggleButton('toggleDiarize', newState);
         
         if (window.appState?.isRecording) {
@@ -132,35 +137,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
     
-    toggleTranslate?.addEventListener('click', () => {
+    toggleTranslate?.addEventListener('click', async () => {
         const newState = !(window.appState?.enableTranslation || false);
+        
         if (window.appState) {
             window.appState.setEnableTranslation(newState);
         }
-        updateToggleButton('toggleTranslate', newState);
-        ipcRenderer.invoke('store-set', 'enableTranslation', newState);
         
-        if (ui.updateTranslationUI) {
-            ui.updateTranslationUI(newState);
+        updateToggleButton('toggleTranslate', newState);
+        await electronAPI.invoke('store-set', 'enableTranslation', newState);
+        
+        if (window.translationUI && window.translationUI.updateTranslationUI) {
+            window.translationUI.updateTranslationUI(newState);
         }
         
-        ipcRenderer.send('translation-setting-changed', newState);
+        electronAPI.send('translation-setting-changed', newState);
     });
     
     // Initialize UI
-    const storedEnableTranslation = await ipcRenderer.invoke('store-get', 'enableTranslation', false);
-    if (ui.updateTranslationUI) {
-        ui.updateTranslationUI(storedEnableTranslation);
+    const storedEnableTranslation = await electronAPI.invoke('store-get', 'enableTranslation', false);
+    if (window.translationUI && window.translationUI.updateTranslationUI) {
+        window.translationUI.updateTranslationUI(storedEnableTranslation);
     }
     
-    if (ui.updateSourceLanguageDropdown) {
-        ui.updateSourceLanguageDropdown();
+    if (window.languageManager && window.languageManager.updateSourceLanguageDropdown) {
+        window.languageManager.updateSourceLanguageDropdown();
     }
     
     await updateDeepgramValidationStatus();
     
-    // Add missing IPC listener for global-toggle-recording event
-    ipcRenderer.on('global-toggle-recording', () => {
+    // Add IPC listeners
+    const globalToggleListener = electronAPI.on('global-toggle-recording', () => {
         const stopBtn = document.getElementById('stop');
         console.log(`[Renderer] Received global-toggle-recording, stopBtn display: ${stopBtn.style.display}`);
         
@@ -175,5 +182,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.recording.startRecording(false);
             }
         }
+    });
+    
+    // Update recording indicator
+    const recordingStateListener = electronAPI.on('recording-state-update', (isRecording) => {
+        const indicator = document.getElementById('recordingIndicator');
+        if (indicator) {
+            if (isRecording) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        }
+    });
+    
+    // Cleanup listeners on window unload
+    window.addEventListener('beforeunload', () => {
+        if (globalToggleListener) globalToggleListener();
+        if (recordingStateListener) recordingStateListener();
     });
 });

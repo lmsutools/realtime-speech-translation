@@ -1,18 +1,31 @@
-import { ipcRenderer } from 'electron';
 import { recordingState } from './recordingState.js';
 
 export class IPCHandler {
     static setupListeners() {
-        ipcRenderer.on('typing-app-typing-mode-changed', (event, isActive) => {
+        // Get electronAPI from window
+        const electronAPI = window.electronAPI;
+        
+        if (!electronAPI) {
+            console.error('[IPCHandler] electronAPI not available');
+            return;
+        }
+        
+        electronAPI.on('typing-app-typing-mode-changed', (isActive) => {
             recordingState.typingActive = isActive;
         });
     }
-
+    
     static sendRecordingStateChanged(isRecording) {
-        ipcRenderer.send('typing-app-recording-state-changed', isRecording);
+        const electronAPI = window.electronAPI;
+        if (electronAPI) {
+            electronAPI.send('typing-app-recording-state-changed', isRecording);
+        }
     }
-
+    
     static sendTranscriptUpdated(text) {
-        ipcRenderer.send('typing-app-transcript-updated', text);
+        const electronAPI = window.electronAPI;
+        if (electronAPI) {
+            electronAPI.send('typing-app-transcript-updated', text);
+        }
     }
 }
