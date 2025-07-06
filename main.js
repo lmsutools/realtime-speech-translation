@@ -1,4 +1,3 @@
-// file: main.js
 const { app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, screen, dialog } = require('electron');
 const path = require('path');
 const { simulatePaste } = require('./modules/typing/typing.js');
@@ -7,7 +6,7 @@ const { appState } = require('./stores/appState.js'); // Import MobX store
 const { runInAction } = require("mobx");
 
 // ----- Expiration Check -----
-const expirationDate = new Date("2025-07-01T00:00:00Z");
+const expirationDate = new Date("2026-07-01T00:00:00Z");
 const currentDate = new Date();
 if (currentDate >= expirationDate) {
     // When the app is ready, show the expiration error and quit.
@@ -17,9 +16,7 @@ if (currentDate >= expirationDate) {
     });
 } else {
     // ----- The rest of the app initialization code runs only if the app is NOT expired -----
-    
-    // Ensure this is at the top
-    let mainWindow;
+    // Ensure this is at the toplet mainWindow;
     let settingsWindow;
     let typingAppWindow = null;
     let isRecording = false;
@@ -44,6 +41,7 @@ if (currentDate >= expirationDate) {
         const mainDefaults = { width: 781, height: 435 };
         const initialMainSizes = { width: 781, height: 435 };
         const restoredState = restoreWindowState(store, 'mainWindowState', mainDefaults, initialMainSizes);
+
         mainWindow = new BrowserWindow({
             x: restoredState.x,
             y: restoredState.y,
@@ -59,6 +57,7 @@ if (currentDate >= expirationDate) {
             },
             autoHideMenuBar: true,
         });
+
         mainWindow.on('ready-to-show', () => {
             setTimeout(() => {
                 const currentBounds = mainWindow.getBounds();
@@ -67,8 +66,10 @@ if (currentDate >= expirationDate) {
                 }
             }, 200);
         });
+
         mainWindow.loadFile('index.html');
         saveWindowState(store, 'mainWindowState', mainWindow);
+
         mainWindow.on('close', (e) => {
             if (process.platform === 'win32' && !app.isQuiting) {
                 e.preventDefault();
@@ -76,6 +77,7 @@ if (currentDate >= expirationDate) {
             }
             return false;
         });
+
         mainWindow.on('closed', () => {
             mainWindow = null;
         });
@@ -87,9 +89,11 @@ if (currentDate >= expirationDate) {
             settingsWindow.focus();
             return;
         }
+
         const settingsDefaults = { width: 270, height: 325 };
         const initialSettingsSizes = { width: 270, height: 325 };
         const restoredState = restoreWindowState(store, 'settingsWindowState', settingsDefaults, initialSettingsSizes);
+
         settingsWindow = new BrowserWindow({
             x: restoredState.x,
             y: restoredState.y,
@@ -104,6 +108,7 @@ if (currentDate >= expirationDate) {
             },
             autoHideMenuBar: true,
         });
+
         settingsWindow.on('ready-to-show', () => {
             setTimeout(() => {
                 const currentBounds = settingsWindow.getBounds();
@@ -112,6 +117,7 @@ if (currentDate >= expirationDate) {
                 }
             }, 200);
         });
+
         settingsWindow.loadFile('modules/settings/settings.html');
         settingsWindow.on('closed', () => {
             settingsWindow = null;
@@ -129,6 +135,7 @@ if (currentDate >= expirationDate) {
                 bounds.x + bounds.width > workArea.x &&
                 bounds.y < workArea.y + workArea.height &&
                 bounds.y + bounds.height > workArea.y;
+
             if (intersects) {
                 isVisible = true;
                 break;
@@ -152,15 +159,18 @@ if (currentDate >= expirationDate) {
             typingAppWindow.focus();
             return;
         }
+
         const idleDefaults = { width: 90, height: 90 };
         const activeDefaults = { width: 400, height: 200 };
         const restoredState = restoreWindowState(store, 'typingAppWindowState', idleDefaults);
+
         const initialBounds = ensureVisibleOnScreen({
             x: restoredState.x,
             y: restoredState.y,
             width: isRecording ? activeDefaults.width : restoredState.width || idleDefaults.width,
             height: isRecording ? activeDefaults.height : restoredState.height || idleDefaults.height,
         });
+
         typingAppWindow = new BrowserWindow({
             x: initialBounds.x,
             y: initialBounds.y,
@@ -179,11 +189,14 @@ if (currentDate >= expirationDate) {
             },
             autoHideMenuBar: true,
         });
+
         typingAppWindow.on('ready-to-show', () => {
             typingAppWindow.webContents.send('typing-app-recording-state', isRecording);
             console.log('[Main] Typing App window ready, sent initial recording state:', isRecording);
         });
+
         typingAppWindow.loadFile('modules/typing/typing-app.html');
+
         typingAppWindow.on('closed', () => {
             typingAppWindow = null;
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -191,6 +204,7 @@ if (currentDate >= expirationDate) {
                 mainWindow.webContents.send('typing-app-window-closed');
             }
         });
+
         saveWindowState(store, 'typingAppWindowState', typingAppWindow);
     }
 
@@ -225,8 +239,7 @@ if (currentDate >= expirationDate) {
         const Store = StoreModule.default;
         store = new Store({
             defaults: {
-                model: 'nova-2',
-                sourceLanguage: 'nova-2|multi',
+                sourceLanguage: 'nova-3|multi',
                 defaultInputDevice: '',
                 diarizationEnabled: false,
                 enableTranslation: false,
@@ -238,29 +251,33 @@ if (currentDate >= expirationDate) {
                 targetLanguage: 'en',
                 typingAppActiveWidth: 400,
                 typingAppActiveHeight: 200,
-                typingActive: false, // Add default for typingActive
+                typingActive: false,
             },
         });
+
         currentGlobalShortcut = store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T');
         registerGlobalShortcut(currentGlobalShortcut);
+
         createMainWindow();
         createTray();
+
         if (process.platform === 'darwin') {
             app.dock.setIcon(iconPath);
         }
-        // Initialize appState from store on app ready, including diarization and translation states
+
+        // Initialize appState from store on app ready
         runInAction(() => {
             appState.setEnableTranslation(store.get('enableTranslation', false));
-            appState.setSourceLanguage(store.get('sourceLanguage', 'nova-2|multi'));
+            appState.setSourceLanguage(store.get('sourceLanguage', 'nova-3|multi'));
             appState.setTargetLanguage(store.get('targetLanguage', 'en'));
             appState.setDeepgramApiKey(store.get('deepgramApiKey', ''));
-            console.log('[Main] Initialized deepgramApiKey:', store.get('deepgramApiKey', ''));
             appState.setDiarizationEnabled(store.get('diarizationEnabled', false));
             appState.setTypingAppGlobalShortcut(store.get('typingAppGlobalShortcut', 'CommandOrControl+Shift+T'));
             appState.setTypingAppActiveWidth(store.get('typingAppActiveWidth', 400));
             appState.setTypingAppActiveHeight(store.get('typingAppActiveHeight', 200));
             appState.setTypingActive(store.get('typingActive', false));
         });
+
         // Notify the renderer of the initial app state
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-app-state', {
@@ -365,9 +382,7 @@ if (currentDate >= expirationDate) {
 
     // IPC handlers for store operations
     ipcMain.handle('store-get', async (event, key, defaultValue) => {
-        const value = store ? store.get(key, defaultValue) : defaultValue;
-        console.log(`[Main] store-get: ${key} = ${value}`);
-        return value;
+        return store ? store.get(key, defaultValue) : defaultValue;
     });
 
     ipcMain.handle('store-set', async (event, key, value) => {
@@ -376,34 +391,15 @@ if (currentDate >= expirationDate) {
             console.log(`[Main] store-set: ${key} = ${value}`);
             runInAction(() => {
                 switch (key) {
-                    case 'enableTranslation':
-                        appState.setEnableTranslation(value);
-                        break;
-                    case 'sourceLanguage':
-                        appState.setSourceLanguage(value);
-                        break;
-                    case 'targetLanguage':
-                        appState.setTargetLanguage(value);
-                        break;
-                    case 'deepgramApiKey':
-                        appState.setDeepgramApiKey(value);
-                        console.log(`[Main] Updated appState.deepgramApiKey: ${value}`);
-                        break;
-                    case 'diarizationEnabled':
-                        appState.setDiarizationEnabled(value);
-                        break;
-                    case 'typingAppGlobalShortcut':
-                        appState.setTypingAppGlobalShortcut(value);
-                        break;
-                    case 'typingAppActiveWidth':
-                        appState.setTypingAppActiveWidth(value);
-                        break;
-                    case 'typingAppActiveHeight':
-                        appState.setTypingAppActiveHeight(value);
-                        break;
-                    case 'typingActive':
-                        appState.setTypingActive(value);
-                        break;
+                    case 'enableTranslation': appState.setEnableTranslation(value); break;
+                    case 'sourceLanguage': appState.setSourceLanguage(value); break;
+                    case 'targetLanguage': appState.setTargetLanguage(value); break;
+                    case 'deepgramApiKey': appState.setDeepgramApiKey(value); break;
+                    case 'diarizationEnabled': appState.setDiarizationEnabled(value); break;
+                    case 'typingAppGlobalShortcut': appState.setTypingAppGlobalShortcut(value); break;
+                    case 'typingAppActiveWidth': appState.setTypingAppActiveWidth(value); break;
+                    case 'typingAppActiveHeight': appState.setTypingAppActiveHeight(value); break;
+                    case 'typingActive': appState.setTypingActive(value); break;
                 }
             });
             return true;
